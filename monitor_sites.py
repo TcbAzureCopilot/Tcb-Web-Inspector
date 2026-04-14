@@ -8,12 +8,12 @@ import time
 import re
 from datetime import datetime
 
-# 🌟 關閉 requests 的 SSL 警告，避免日誌被塞爆
+# 關閉 requests 的 SSL 警告
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # =====================================================================
-# 1. 監控設定區 (已還原為正常網址，動態系統 key 設為空以防誤報)
+# 1. 監控設定區 
 # =====================================================================
 SITES = [
     {"name": "銀行官網", "url": "https://www.tcb-bank.com.tw/", "key": "合作金庫"},
@@ -87,7 +87,6 @@ def check_sites():
     for site in SITES:
         try:
             start_time = time.time()
-            # 🌟 加入 verify=False 強行突破 SSLError
             res = requests.get(site['url'], timeout=20, headers=headers, verify=False)
             latency = int((time.time() - start_time) * 1000)
             
@@ -98,20 +97,22 @@ def check_sites():
             
             ssl_info = get_ssl_expiry(site['url'])
 
-            # 🌟 寬容判定邏輯
-            # 只要 HTTP 狀態碼是 200, 401(驗證), 403(拒絕), 404(找不到)，都代表「伺服器是活著的」
+            # 🌟 狀態判定邏輯升級
             if res.status_code in [200, 401, 403, 404]:
                 kw_ok = (site['key'] == "") or (site['key'] in res.text)
                 if not kw_ok and res.status_code == 200:
                     status = "🟡 內容異動(無關鍵字)"
                     finger = f"⚠️ ({curr_hash})"
                 elif res.status_code != 200:
-                    # 回傳 403/404，雖然被擋或找不到頁面，但機器活著，所以給綠燈
                     status = f"🟢 存活(WAF回應 {res.status_code})"
                     finger = "✅ 穩定"
                 else:
                     status = "🟢 正常"
                     finger = "✅ 穩定"
+            elif res.status_code == 500:
+                # HTTP 500 代表伺服器活著，只是程式報錯，不亮紅燈
+                status = "🟡 存活(系統報錯500)"
+                finger = "N/A"
             else:
                 status = f"🔴 異常 (HTTP {res.status_code})"
                 finger = "N/A"
@@ -123,11 +124,14 @@ def check_sites():
             })
             new_state[site['name']] = {"hash": curr_hash}
             
+        except requests.exceptions.SSLError:
+            # 🌟 抓到了！底層協定不通但伺服器存活
+            results.append({"name": site['name'], "url": site['url'], "status": "🟢 存活(SSL交握阻擋)", "ssl": "N/A", "latency": "阻擋", "fingerprint": "N/A"})
         except requests.exceptions.Timeout:
-            results.append({"name": site['name'], "url": site['url'], "status": "🟡 逾時(疑海外阻擋)", "ssl": "N/A", "latency": "Timeout", "fingerprint": "N/A"})
+            # 🌟 物理阻擋，標示清楚不再報錯
+            results.append({"name": site['name'], "url": site['url'], "status": "⚪ 境外阻擋(伺服器預設)", "ssl": "N/A", "latency": "Timeout", "fingerprint": "N/A"})
         except Exception as e:
             results.append({"name": site['name'], "url": site['url'], "status": f"🔥 斷線({type(e).__name__})", "ssl": "N/A", "latency": "0", "fingerprint": "N/A"})
-            # ConnectionError 通常是被防火牆強踢，先標為危急
             is_critical = True
 
     os.makedirs("data", exist_ok=True)
@@ -144,7 +148,8 @@ def update_html(results):
     for r in results:
         style = "status-green"
         if "異常" in r['status'] or "斷線" in r['status']: style = "status-red"
-        elif "異動" in r['status'] or "逾時" in r['status']: style = "status-yellow"
+        elif "異動" in r['status'] or "存活(" in r['status']: style = "status-yellow"
+        if "境外阻擋" in r['status']: style = "status-yellow" # 特殊標記，不亮紅燈
         
         rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>\n"""
 
@@ -212,5 +217,7 @@ def send_teams(results, is_critical):
 if __name__ == "__main__":
     data, critical = check_sites()
     update_html(data)
-    if critical or datetime.now().minute < 15:
+    
+    current_minute = datetime.now().minute
+    if critical or current_minute < 15:
         send_teams(data, critical)
