@@ -23,6 +23,13 @@ jobs:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: |
           python monitor_sites.py
+      - name: Commit and Push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add index.html data/site_state.json
+          git commit -m "Update Dashboard" || exit 0
+          git push
       - name: Commit State & Update Dashboard
         run: |
           git config --local user.email "action@github.com"
