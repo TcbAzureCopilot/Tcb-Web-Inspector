@@ -132,7 +132,7 @@ def check_sites():
 # =====================================================================
 
 def update_html(results):
-    """安全地將結果寫入 index.html (絕不造成檔案無限擴充)"""
+    """霸道全覆蓋法：每次直接生成全新的 HTML，徹底消滅解析失敗的可能"""
     rows = ""
     for r in results:
         style = "status-green"
@@ -141,25 +141,63 @@ def update_html(results):
         
         rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>\n"""
 
-    if os.path.exists(DASHBOARD_FILE):
-        try:
-            with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
-                content = f.read()
-            
-            # 使用明確的 Split 切割，這是最穩定不吃標籤的方法
-            header_part = content.split('')[0]
-            footer_part = content.split('')[1]
-            
-            new_content = header_part + "\n" + rows + "" + footer_part
-            
-            update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            new_content = re.sub(r'<span id="update-time">.*?</span>', f'<span id="update-time">{update_time}</span>', new_content)
+    update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-                f.write(new_content)
-            print("✅ HTML 儀表板已安全更新。")
-        except Exception as e:
-            print(f"❌ HTML 寫入失敗: {e}")
+    # 完整 HTML 模板直接包在 Python 裡
+    html_content = f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="60">
+    <title>TCB WEB INSPECTOR</title>
+    <style>
+        body {{ background: #0b0e14; color: #c9d1d9; font-family: sans-serif; padding: 20px; }}
+        .dashboard-table {{ width: 100%; border-collapse: collapse; background: #161b22; box-shadow: 0 0 20px rgba(0,0,0,0.5); }}
+        .dashboard-table th, td {{ border: 1px solid #30363d; padding: 15px; text-align: left; }}
+        .dashboard-table th {{ background: #1f242c; color: #00f2ff; }}
+        .status-badge {{ padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }}
+        .status-green {{ color: #2ecc71; border: 1px solid #2ecc71; }}
+        .status-yellow {{ color: #f1c40f; border: 1px solid #f1c40f; }}
+        .status-red {{ color: #e74c3c; border: 1px solid #e74c3c; }}
+        .accent {{ color: #00f2ff; text-shadow: 0 0 5px #00f2ff; letter-spacing: 2px; }}
+        a {{ color: #00f2ff; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+    </style>
+</head>
+<body>
+    <h1 class="accent">TCB WEB MONITORING CENTER</h1>
+    <p>
+        LAST UPDATE: <span id="update-time">{update_time}</span> | 
+        <span style="color: #8b949e;">距離下次重整: <span id="secs">60</span>s</span>
+    </p>
+    
+    <table class="dashboard-table">
+        <thead>
+            <tr><th>系統名稱</th><th>當前狀態</th><th>SSL 效期</th><th>回應延遲</th><th>指紋狀態</th><th>快速連結</th></tr>
+        </thead>
+        <tbody id="table-body">
+{rows}
+        </tbody>
+    </table>
+
+    <script>
+        let timeLeft = 60;
+        setInterval(() => {{
+            timeLeft--;
+            document.getElementById('secs').innerText = timeLeft;
+            if (timeLeft <= 0) location.reload();
+        }}, 1000);
+    </script>
+</body>
+</html>"""
+
+    # 直接強制覆蓋寫入檔案
+    try:
+        with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print("✅ HTML 儀表板已霸道更新完成。")
+    except Exception as e:
+        print(f"❌ HTML 寫入失敗: {e}")
 
 def send_teams(results, is_critical):
     """向 Microsoft Teams 或 Power Automate 發送結構化告警"""
