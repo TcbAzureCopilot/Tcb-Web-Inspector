@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import time
+import re
 from datetime import datetime
 
 # =====================================================================
@@ -22,44 +23,32 @@ DASHBOARD_FILE = "index.html"
 GITHUB_IO_URL = "https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/" 
 
 # =====================================================================
-# 深度檢測：強化 SSL 抓取
+# 嚴謹化邏輯：過濾動態內容
 # =====================================================================
-def get_ssl_expiry(url):
-    try:
-        hostname = url.split("//")[-1].split("/")[0]
-        # 🌟 修正點：使用不驗證模式來強行抓取憑證內容
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        
-        with socket.create_connection((hostname, 443), timeout=10) as sock:
-            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                cert = ssock.getpeercert(binary_form=True)
-                x509 = ssl.DER_cert_to_PEM_cert(cert)
-                # 使用簡單路徑抓取有效期限
-                from cryptography import x509 as crypto_x509
-                cert_obj = crypto_x509.load_pem_x509_certificate(x509.encode())
-                expiry_date = cert_obj.not_valid_after_utc
-                days_left = (expiry_date.replace(tzinfo=None) - datetime.utcnow()).days
-                return f"{days_left}天"
-    except Exception as e:
-        print(f"SSL Error for {url}: {e}")
-        return "無法取得"
+def clean_html(html):
+    """剔除網頁中容易變動的動態部分，減少誤報"""
+    # 移除所有 <script> 內容
+    html = re.sub(r'<script.*?>.*?</script>', '', html, flags=re.DOTALL)
+    # 移除所有 <style> 內容 (有時會有動態路徑)
+    html = re.sub(r'<style.*?>.*?</style>', '', html, flags=re.DOTALL)
+    # 移除隱藏的 input (常見 CSRF Token)
+    html = re.sub(r'<input type="hidden".*?>', '', html)
+    # 移除註解
+    html = re.sub(r'', '', html, flags=re.DOTALL)
+    return html
 
-# 如果環境沒有 cryptography 套件，補救方案：
-def get_ssl_expiry_backup(url):
+def get_ssl_expiry(url):
     try:
         hostname = url.split("//")[-1].split("/")[0]
         context = ssl.create_default_context()
         with socket.create_connection((hostname, 443), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
                 cert = ssock.getpeercert()
-                if not cert: return "N/A"
                 expiry_str = cert['notAfter']
                 expiry_date = datetime.strptime(expiry_str, '%b %d %H:%M:%S %Y %G')
                 days_left = (expiry_date - datetime.now()).days
                 return f"{days_left}天"
-    except: return "N/A"
+    except: return "檢測中"
 
 def check_sites():
     old_state = {}
@@ -71,7 +60,7 @@ def check_sites():
 
     results = []
     new_state = {}
-    has_error = False
+    has_critical = False
     headers = {'User-Agent': 'Mozilla/5.0'}
 
     for site in SITES:
@@ -79,24 +68,29 @@ def check_sites():
             start_time = time.time()
             res = requests.get(site['url'], timeout=25, headers=headers)
             latency = int((time.time() - start_time) * 1000)
-            content = res.text
             
-            kw_ok = site['key'] in content
-            curr_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()[:10]
+            # 🌟 嚴謹指紋比對：只比對「乾淨」的內容
+            cleaned_content = clean_html(res.text)
+            curr_hash = hashlib.sha256(cleaned_content.encode('utf-8')).hexdigest()[:12]
+            
             old_hash = old_state.get(site['name'], {}).get('hash')
             hash_changed = old_hash and curr_hash != old_hash
             
-            # 優先使用第一種 SSL 抓取法
-            ssl_info = get_ssl_expiry_backup(site['url'])
+            kw_ok = site['key'] in res.text
+            ssl_info = get_ssl_expiry(site['url'])
 
             status = "🟢 正常"
-            finger = "✅ 未變動"
-            if hash_changed: 
-                status = "🚨 竄改預警"; finger = f"⚠️ 已變更"; has_error = True
-            elif not kw_ok: 
-                status = "🟡 內容異常"; has_error = True
-            elif res.status_code != 200: 
-                status = f"🔴 錯誤({res.status_code})"; has_error = True
+            finger = "✅ 穩定"
+            
+            # 只有當關鍵字消失 OR 狀態碼錯誤時才視為緊急異常
+            if not kw_ok or res.status_code != 200:
+                status = "🔴 異常/內容缺失"
+                has_critical = True
+            # 指紋變動僅視為「提醒」，不一定觸發緊急告警（除非你希望它很嚴格）
+            elif hash_changed:
+                status = "🟡 內容微調"
+                finger = f"⚠️ 變動({curr_hash})"
+                # 若要極度嚴謹，這裡 has_critical 可設為 False，僅在儀表板更新
 
             results.append({
                 "name": site['name'], "url": site['url'], "status": status,
@@ -105,53 +99,45 @@ def check_sites():
             new_state[site['name']] = {"hash": curr_hash}
         except Exception as e:
             results.append({"name": site['name'], "url": site['url'], "status": "🔥 斷線", "ssl": "N/A", "latency": "0", "fingerprint": "N/A"})
-            has_error = True
+            has_critical = True
 
     with open(STATE_FILE, 'w') as f:
         json.dump(new_state, f)
-    return results, has_error
+    return results, has_critical
 
 # =====================================================================
-# 3. 儀表板更新 (修正插入邏輯)
+# 儀表板更新：修正 HTML 注入
 # =====================================================================
 def update_html(results):
-    table_rows = ""
+    rows = ""
     for r in results:
         style = "status-green"
-        if "正常" not in r['status']: style = "status-red"
+        if "正常" not in r['status'] and "微調" not in r['status']: style = "status-red"
+        if "微調" in r['status']: style = "status-yellow"
         
-        table_rows += f"""
-        <tr>
-            <td>{r['name']}</td>
-            <td><span class="status-badge {style}">{r['status']}</span></td>
-            <td>{r['ssl']}</td>
-            <td>{r['latency']}</td>
-            <td><code>{r['fingerprint']}</code></td>
-            <td><a href="{r['url']}" target="_blank">造訪網頁</a></td>
-        </tr>"""
+        rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>"""
 
     if os.path.exists(DASHBOARD_FILE):
         with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
+            html = f.read()
         
-        # 🌟 修正點：使用更穩定的取代方式
-        import re
-        # 取代表格內容
-        pattern = r'<tbody>.*?</tbody>'
-        new_content = re.sub(pattern, f'<tbody id="table-body">{table_rows}</tbody>', content, flags=re.DOTALL)
+        # 使用簡單的 Marker 替換
+        parts = html.split('')
+        header = parts[0]
+        footer = parts[1].split('')[1]
         
-        # 更新時間
         update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', 
-                             f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_content)
+        new_html = f"{header}{rows}{footer}"
+        new_html = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_html)
 
         with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-            f.write(new_content)
+            f.write(new_html)
 
-def send_teams(results, is_urgent):
+def send_teams(results, is_critical):
     webhook = os.environ.get('TEAMS_WEBHOOK_URL')
     if not webhook: return
-    title = "🚨 監控異常告警" if is_urgent else "✅ 監控整點報時"
+    # 🌟 只有「真正異常」或是「整點」才發 Teams
+    title = "🚨 系統緊急告警" if is_critical else "✅ 定時巡檢報告"
     table = "| 系統 | 狀態 | SSL | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
     for r in results:
         table += f"| {r['name']} | {r['status']} | {r['ssl']} | {r['latency']} | {r['fingerprint']} |\n"
@@ -160,7 +146,8 @@ def send_teams(results, is_urgent):
     requests.post(webhook, json=payload)
 
 if __name__ == "__main__":
-    data, error = check_sites()
+    data, critical = check_sites()
     update_html(data)
-    if error or datetime.now().minute < 15:
-        send_teams(data, error)
+    # 僅在嚴重錯誤或整點時發送訊息
+    if critical or datetime.now().minute < 15:
+        send_teams(data, critical)
