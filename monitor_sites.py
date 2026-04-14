@@ -219,5 +219,5 @@ if __name__ == "__main__":
     update_html(data)
     
     current_minute = datetime.now().minute
-    if critical or current_minute < 15:
-        send_teams(data, critical)
+    #if critical or current_minute < 15:
+    send_teams(data, critical)
