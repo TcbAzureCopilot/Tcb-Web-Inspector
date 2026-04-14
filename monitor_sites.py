@@ -14,12 +14,16 @@ def check_all_sites():
     report_lines = []
     has_error = False
     
+    # 🌟 增加偽裝瀏覽器的 Header
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
     for site in SITES:
         try:
-            # 設定 10 秒超時防止被卡死
-            res = requests.get(site['url'], timeout=10)
+            # 🌟 將 timeout 增加到 25 秒，並加入 headers
+            res = requests.get(site['url'], timeout=25, headers=headers)
             
-            # 判斷狀態
             if res.status_code == 200:
                 if site['key'] in res.text:
                     status = "🟢 正常"
@@ -29,6 +33,9 @@ def check_all_sites():
             else:
                 status = f"🔴 錯誤 (代碼: {res.status_code})"
                 has_error = True
+        except requests.exceptions.Timeout:
+            status = "⏳ 逾時 (國外連線過慢)"
+            has_error = True
         except Exception as e:
             status = f"🔥 斷線 ({type(e).__name__})"
             has_error = True
