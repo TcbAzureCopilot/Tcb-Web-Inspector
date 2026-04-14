@@ -1,11 +1,14 @@
-name: 15-Min Site Inspector
+name: AIOps Advanced Monitor
 on:
   schedule:
-    - cron: '*/15 * * * *'  # 每 15 分鐘執行一次
-  workflow_dispatch:        # 允許手動點擊執行
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write # 必須有寫入權限才能存儲指紋狀態
 
 jobs:
-  inspect:
+  run-monitor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -15,7 +18,15 @@ jobs:
           python-version: '3.10'
       - name: Install dependencies
         run: pip install requests
-      - name: Run Monitoring
+      - name: Execute Inspection
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        run: python monitor_sites.py
+        run: |
+          python monitor_sites.py
+      - name: Commit State & Update Dashboard
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "AIOps Bot"
+          git add data/site_state.json index.html
+          git commit -m "Auto: Update monitoring state and dashboard" || echo "No changes"
+          git push
