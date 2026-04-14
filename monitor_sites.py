@@ -129,22 +129,23 @@ def update_html(results):
         with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         
-        # 🌟 修正點：使用明確的 Marker 切割，避免 empty separator
-        marker_start = ''
-        marker_end = ''
+        # 🌟 終極防彈版：使用正規表達式直接覆蓋，絕對不會有 empty separator 的問題
+        import re
         
-        if marker_start in content and marker_end in content:
-            parts = content.split(marker_start)
-            header = parts[0]
-            footer = parts[1].split(marker_end)[1]
-            new_html = f"{header}{marker_start}{rows}{marker_end}{footer}"
-            
-            update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            new_html = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', 
-                             f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_html)
+        # 尋找 到 之間的所有內容並替換
+        pattern = r'.*?'
+        replacement = f'\n<tbody id="table-body">\n{rows}\n</tbody>\n'
+        
+        # 執行表格替換
+        new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+        
+        # 執行時間替換
+        update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', 
+                             f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_content)
 
-            with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-                f.write(new_html)
+        with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
+            f.write(new_content)
 
 def send_teams(results, is_critical):
     webhook = os.environ.get('TEAMS_WEBHOOK_URL')
