@@ -49,9 +49,21 @@ def send_to_power_automate(data):
     if not webhook_url:
         print("❌ 找不到 Webhook URL")
         return
+
+    # 🌟 關鍵修正：配合你 Power Automate 的欄位名稱 "message"
+    payload = {
+        "message": f"### {data['title']}\n\n{data['status_report']}"
+    }
     
-    response = requests.post(webhook_url, json=data)
-    print(f"✅ 已傳送至 Power Automate，狀態碼: {response.status_code}")
+    try:
+        response = requests.post(
+            webhook_url, 
+            json=payload,
+            headers={'Content-Type': 'application/json'}
+        )
+        print(f"✅ 已傳送至 Power Automate，狀態碼: {response.status_code}")
+    except Exception as e:
+        print(f"💥 發送失敗: {e}")
 
 if __name__ == "__main__":
     results = check_all_sites()
