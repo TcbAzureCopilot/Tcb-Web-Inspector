@@ -122,17 +122,20 @@ def update_html(results):
         with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         
-        # 安全的替換邏輯
+        import re
+        # 🌟 關鍵修復：替換內容時，務必把錨點也寫回去，防止無限疊加
         pattern = r'.*?'
         replacement = f'\n{rows}'
-        content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+        
+        new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
         
         update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', f'LAST UPDATE: <span id="update-time">{update_time}</span>', content)
+        new_content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', 
+                             f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_content)
 
         with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-            f.write(content)
-
+            f.write(new_content)
+            
 def send_teams(results, is_critical):
     webhook = os.environ.get('TEAMS_WEBHOOK_URL')
     if not webhook: return
