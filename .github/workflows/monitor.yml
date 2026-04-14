@@ -5,35 +5,32 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # 必須有寫入權限才能存儲指紋狀態
+  contents: write
 
 jobs:
   run-monitor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          pip install requests cryptography
+
       - name: Execute Inspection
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        run: |
-          python monitor_sites.py
-      - name: Commit and Push
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add index.html data/site_state.json
-          git commit -m "Update Dashboard" || exit 0
-          git push
-      - name: Commit State & Update Dashboard
+        run: python monitor_sites.py
+
+      - name: Push Updates
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "AIOps Bot"
-          git add data/site_state.json index.html
-          git commit -m "Auto: Update monitoring state and dashboard" || echo "No changes"
+          git add index.html data/site_state.json
+          git commit -m "Auto: Update dashboard and finger-state" || exit 0
           git push
