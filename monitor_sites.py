@@ -149,7 +149,7 @@ def update_html(results):
         style = "status-green"
         if "異常" in r['status'] or "斷線" in r['status']: style = "status-red"
         elif "異動" in r['status'] or "存活(" in r['status']: style = "status-yellow"
-        if "境外阻擋" in r['status']: style = "status-yellow" # 特殊標記，不亮紅燈
+        if "境外阻擋" in r['status']: style = "status-yellow"
         
         rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>\n"""
 
@@ -173,6 +173,9 @@ def update_html(results):
         .accent {{ color: #00f2ff; text-shadow: 0 0 5px #00f2ff; letter-spacing: 2px; }}
         a {{ color: #00f2ff; text-decoration: none; }}
         a:hover {{ text-decoration: underline; }}
+        /* 🌟 說明區塊的 CSS */
+        .info-panel {{ margin-top: 30px; padding: 20px; background: #161b22; border-left: 4px solid #00f2ff; color: #8b949e; font-size: 14px; line-height: 1.8; box-shadow: 0 0 10px rgba(0,0,0,0.3); }}
+        .info-panel strong {{ color: #c9d1d9; }}
     </style>
 </head>
 <body>
@@ -187,6 +190,15 @@ def update_html(results):
 {rows}
         </tbody>
     </table>
+    
+    <div class="info-panel">
+        <strong style="color:#00f2ff; font-size: 16px;">[ 系統指標與檢測邏輯說明 ]</strong><br>
+        <strong>• 當前狀態：</strong>綜合判定 HTTP 狀態碼與內容關鍵字。收到 403/404 等 WAF 防火牆阻擋視為「系統存活」，500 視為「後端報錯」，TCP Timeout 則標記為「境外阻擋」。<br>
+        <strong>• SSL 效期：</strong>繞過中繼代理，直接透過 Port 443 與終端伺服器進行底層交握，解析 X.509 憑證並計算至 UTC 到期日之剩餘天數。<br>
+        <strong>• 回應延遲：</strong>記錄從發出 HTTP GET 請求起，至收到伺服器初始回應 (Headers) 的絕對時間差 (以毫秒 ms 計)。<br>
+        <strong>• 指紋狀態：</strong>自動剝除網頁中的程式碼 (Script)、樣式表 (CSS) 與 HTML 標籤，僅針對「肉眼可見純文字」進行 SHA-256 雜湊運算。若雜湊值變更即觸發異動警示 (防誤報設計)。
+    </div>
+
     <script>
         let timeLeft = 60;
         setInterval(() => {{
