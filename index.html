@@ -1,78 +1,26 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="60">
-    <title>TCB WEB INSPECTOR</title>
-    <style>
+<meta charset="UTF-8">
+<title>TCB WEB INSPECTOR</title>
+<style>
         body { background: #0b0e14; color: #c9d1d9; font-family: sans-serif; padding: 20px; }
-        .dashboard-table { width: 100%; border-collapse: collapse; background: #161b22; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .dashboard-table th, td { border: 1px solid #30363d; padding: 15px; text-align: left; }
-        .dashboard-table th { background: #1f242c; color: #00f2ff; }
-        .status-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        .dashboard-table { width: 100%; border-collapse: collapse; background: #161b22; }
+        .dashboard-table th, td { border: 1px solid #30363d; padding: 15px; }
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; }
         .status-green { color: #2ecc71; border: 1px solid #2ecc71; }
         .status-yellow { color: #f1c40f; border: 1px solid #f1c40f; }
         .status-red { color: #e74c3c; border: 1px solid #e74c3c; }
-        .accent { color: #00f2ff; text-shadow: 0 0 5px #00f2ff; letter-spacing: 2px; }
-        a { color: #00f2ff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        /* 🌟 說明區塊的 CSS */
-        .info-panel { margin-top: 30px; padding: 20px; background: #161b22; border-left: 4px solid #00f2ff; color: #8b949e; font-size: 14px; line-height: 1.8; box-shadow: 0 0 10px rgba(0,0,0,0.3); }
-        .info-panel strong { color: #c9d1d9; }
-    </style>
+        .accent { color: #00f2ff; }
+        a { color: #00f2ff; }
+</style>
 </head>
 <body>
-    <h1 class="accent">TCB WEB MONITORING CENTER</h1>
-    <p>
-        LAST UPDATE: <span id="update-time">2026-04-14 06:55:53</span> | 
-        <span style="color: #8b949e;">距離下次重整: <span id="secs">60</span>s</span>
-    </p>
-    <table class="dashboard-table">
-        <thead><tr><th>系統名稱</th><th>當前狀態</th><th>SSL 效期</th><th>回應延遲</th><th>指紋狀態</th><th>快速連結</th></tr></thead>
-        <tbody id="table-body">
-<tr><td>銀行官網</td><td><span class="status-badge status-green">🟢 正常</span></td><td>169天</td><td>2180ms</td><td><code>✅ 穩定</code></td><td><a href="https://www.tcb-bank.com.tw/" target="_blank">造訪</a></td></tr>
-<tr><td>合庫金控官網</td><td><span class="status-badge status-green">🟢 正常</span></td><td>246天</td><td>2173ms</td><td><code>✅ 穩定</code></td><td><a href="https://www.tcfhc.com.tw/" target="_blank">造訪</a></td></tr>
-<tr><td>個人網路銀行</td><td><span class="status-badge status-green">🟢 正常</span></td><td>67天</td><td>1064ms</td><td><code>✅ 穩定</code></td><td><a href="https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/" target="_blank">造訪</a></td></tr>
-<tr><td>網路銀行</td><td><span class="status-badge status-green">🟢 正常</span></td><td>67天</td><td>723ms</td><td><code>✅ 穩定</code></td><td><a href="https://cobank.tcb-bank.com.tw" target="_blank">造訪</a></td></tr>
-<tr><td>企業網路銀行</td><td><span class="status-badge status-green">🟢 正常</span></td><td>67天</td><td>888ms</td><td><code>✅ 穩定</code></td><td><a href="https://cobank.tcb-bank.com.tw/TCB.TWNB.CORP.WEB/" target="_blank">造訪</a></td></tr>
-<tr><td>合庫銀行eATM</td><td><span class="status-badge status-green">🟢 正常</span></td><td>134天</td><td>1313ms</td><td><code>✅ 穩定</code></td><td><a href="https://eatm.tcb-bank.com.tw" target="_blank">造訪</a></td></tr>
-<tr><td>金邊分行網銀</td><td><span class="status-badge status-green">🟢 正常</span></td><td>N/A</td><td>2268ms</td><td><code>✅ 穩定</code></td><td><a href="https://ebankkh.tcb-bank.com.tw:446" target="_blank">造訪</a></td></tr>
-<tr><td>香港網銀入口</td><td><span class="status-badge status-green">🟢 正常</span></td><td>179天</td><td>1372ms</td><td><code>✅ 穩定</code></td><td><a href="https://ebank.tcb-bank.com.hk/TCB.HKNB.CORP.WEB/bank.jsp" target="_blank">造訪</a></td></tr>
-<tr><td>大陸網銀</td><td><span class="status-badge status-yellow">🟢 存活(SSL交握阻擋)</span></td><td>N/A</td><td>阻擋</td><td><code>N/A</code></td><td><a href="https://cobank.tcbbk.com.cn" target="_blank">造訪</a></td></tr>
-<tr><td>全球金融網</td><td><span class="status-badge status-green">🟢 正常</span></td><td>163天</td><td>1099ms</td><td><code>✅ 穩定</code></td><td><a href="https://feoi.tcb-bank.com.tw" target="_blank">造訪</a></td></tr>
-<tr><td>媒體檔案傳輸</td><td><span class="status-badge status-green">🟢 正常</span></td><td>182天</td><td>882ms</td><td><code>✅ 穩定</code></td><td><a href="https://webftp.tcb-bank.com.tw/FileTrans/viewLoginDmz.action" target="_blank">造訪</a></td></tr>
-<tr><td>電子代收系統</td><td><span class="status-badge status-green">🟢 正常</span></td><td>311天</td><td>996ms</td><td><code>✅ 穩定</code></td><td><a href="https://ars.tcb-bank.com.tw/" target="_blank">造訪</a></td></tr>
-<tr><td>招標採購公告</td><td><span class="status-badge status-yellow">⚪ 境外阻擋(伺服器預設)</span></td><td>N/A</td><td>Timeout</td><td><code>N/A</code></td><td><a href="https://ebulletin.tcb-bank.com.tw/bulletin-web/" target="_blank">造訪</a></td></tr>
-<tr><td>線上取號系統</td><td><span class="status-badge status-yellow">⚪ 境外阻擋(伺服器預設)</span></td><td>N/A</td><td>Timeout</td><td><code>N/A</code></td><td><a href="https://otn.tcb-bank.com.tw/ACweb/" target="_blank">造訪</a></td></tr>
-<tr><td>金庫幣</td><td><span class="status-badge status-green">🟢 正常</span></td><td>212天</td><td>876ms</td><td><code>✅ 穩定</code></td><td><a href="https://mpp.tcb-bank.com.tw/" target="_blank">造訪</a></td></tr>
-<tr><td>Mpos行動收單</td><td><span class="status-badge status-green">🟢 正常</span></td><td>313天</td><td>16945ms</td><td><code>✅ 穩定</code></td><td><a href="https://mpos.tcb-bank.com.tw/erc/Login/Login.aspx" target="_blank">造訪</a></td></tr>
-<tr><td>信託服務網</td><td><span class="status-badge status-green">🟢 正常</span></td><td>142天</td><td>1529ms</td><td><code>✅ 穩定</code></td><td><a href="https://trusts.tcb-bank.com.tw/eTrust/" target="_blank">造訪</a></td></tr>
-<tr><td>智能理財</td><td><span class="status-badge status-green">🟢 正常</span></td><td>275天</td><td>1099ms</td><td><code>✅ 穩定</code></td><td><a href="https://irobo.tcb-bank.com.tw/irobo" target="_blank">造訪</a></td></tr>
-<tr><td>財管滿意度調查</td><td><span class="status-badge status-green">🟢 正常</span></td><td>21天</td><td>867ms</td><td><code>✅ 穩定</code></td><td><a href="https://wms.tcb-bank.com.tw/" target="_blank">造訪</a></td></tr>
-<tr><td>小規模營業人諮詢</td><td><span class="status-badge status-yellow">🟡 存活(系統報錯500)</span></td><td>67天</td><td>867ms</td><td><code>N/A</code></td><td><a href="https://cobank.tcb-bank.com.tw/ELNA/litinput.jsp" target="_blank">造訪</a></td></tr>
-<tr><td>供應商查詢系統</td><td><span class="status-badge status-green">🟢 正常</span></td><td>6天</td><td>892ms</td><td><code>✅ 穩定</code></td><td><a href="https://mbbank.tcb-bank.com.tw/QSMS/" target="_blank">造訪</a></td></tr>
-<tr><td>票券保管銀行</td><td><span class="status-badge status-green">🟢 正常</span></td><td>36天</td><td>1156ms</td><td><code>✅ 穩定</code></td><td><a href="https://ebills.tcb-bank.com.tw" target="_blank">造訪</a></td></tr>
-<tr><td>新一代信貸系統</td><td><span class="status-badge status-green">🟢 正常</span></td><td>67天</td><td>881ms</td><td><code>✅ 穩定</code></td><td><a href="https://cobank.tcb-bank.com.tw/TCB.LOAN.SERVICE/PersonalLoan/Index" target="_blank">造訪</a></td></tr>
-<tr><td>跨境支付特店後台</td><td><span class="status-badge status-green">🟢 正常</span></td><td>338天</td><td>965ms</td><td><code>✅ 穩定</code></td><td><a href="https://copay.tcb-bank.com.tw/fesnetMP2/" target="_blank">造訪</a></td></tr>
-
-        </tbody>
-    </table>
-    
-    <div class="info-panel">
-        <strong style="color:#00f2ff; font-size: 16px;">[ 系統指標與檢測邏輯說明 ]</strong><br>
-        <strong>• 當前狀態：</strong>綜合判定 HTTP 狀態碼與內容關鍵字。收到 403/404 等 WAF 防火牆阻擋視為「系統存活」，500 視為「後端報錯」，TCP Timeout 則標記為「境外阻擋」。<br>
-        <strong>• SSL 效期：</strong>繞過中繼代理，直接透過 Port 443 與終端伺服器進行底層交握，解析 X.509 憑證並計算至 UTC 到期日之剩餘天數。<br>
-        <strong>• 回應延遲：</strong>記錄從發出 HTTP GET 請求起，至收到伺服器初始回應 (Headers) 的絕對時間差 (以毫秒 ms 計)。<br>
-        <strong>• 指紋狀態：</strong>自動剝除網頁中的程式碼 (Script)、樣式表 (CSS) 與 HTML 標籤，僅針對「肉眼可見純文字」進行 SHA-256 雜湊運算。若雜湊值變更即觸發異動警示 (防誤報設計)。
-    </div>
-
-    <script>
-        let timeLeft = 60;
-        setInterval(() => {
-            timeLeft--;
-            document.getElementById('secs').innerText = timeLeft;
-            if (timeLeft <= 0) location.reload();
-        }, 1000);
-    </script>
+<h1 class="accent">TCB WEB MONITORING CENTER</h1>
+<p>LAST UPDATE: 2026-04-14 15:24:18</p>
+<table class="dashboard-table">
+<thead><tr><th>系統名稱</th><th>當前狀態</th><th>SSL 效期</th><th>回應延遲</th><th>指紋狀態</th><th>快速連結</th></tr></thead>
+<tbody><tr><td>銀行官網</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>723ms</td><td><code>✅ 穩定</code></td><td><a href='https://www.tcb-bank.com.tw/' target='_blank'>造訪</a></td></tr><tr><td>合庫金控官網</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>242ms</td><td><code>✅ 穩定</code></td><td><a href='https://www.tcfhc.com.tw/' target='_blank'>造訪</a></td></tr><tr><td>個人網路銀行</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>46ms</td><td><code>✅ 穩定</code></td><td><a href='https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/' target='_blank'>造訪</a></td></tr><tr><td>網路銀行</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>13ms</td><td><code>✅ 穩定</code></td><td><a href='https://cobank.tcb-bank.com.tw' target='_blank'>造訪</a></td></tr><tr><td>企業網路銀行</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>15ms</td><td><code>✅ 穩定</code></td><td><a href='https://cobank.tcb-bank.com.tw/TCB.TWNB.CORP.WEB/' target='_blank'>造訪</a></td></tr><tr><td>合庫銀行eATM</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>67ms</td><td><code>✅ 穩定</code></td><td><a href='https://eatm.tcb-bank.com.tw' target='_blank'>造訪</a></td></tr><tr><td>金邊分行網銀</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>49ms</td><td><code>✅ 穩定</code></td><td><a href='https://ebankkh.tcb-bank.com.tw:446' target='_blank'>造訪</a></td></tr><tr><td>香港網銀入口</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>169ms</td><td><code>✅ 穩定</code></td><td><a href='https://ebank.tcb-bank.com.hk/TCB.HKNB.CORP.WEB/bank.jsp' target='_blank'>造訪</a></td></tr><tr><td>大陸網銀</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>2065ms</td><td><code>✅ 穩定</code></td><td><a href='https://cobank.tcbbk.com.cn' target='_blank'>造訪</a></td></tr><tr><td>全球金融網</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>182ms</td><td><code>✅ 穩定</code></td><td><a href='https://feoi.tcb-bank.com.tw' target='_blank'>造訪</a></td></tr><tr><td>媒體檔案傳輸系統</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>71ms</td><td><code>✅ 穩定</code></td><td><a href='https://webftp.tcb-bank.com.tw/FileTrans/viewLoginDmz.action' target='_blank'>造訪</a></td></tr><tr><td>電子代收系統</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>60ms</td><td><code>✅ 穩定</code></td><td><a href='https://ars.tcb-bank.com.tw/' target='_blank'>造訪</a></td></tr><tr><td>招標採購公告系統</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>47ms</td><td><code>✅ 穩定</code></td><td><a href='https://ebulletin.tcb-bank.com.tw/bulletin-web/' target='_blank'>造訪</a></td></tr><tr><td>線上取號系統</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>46ms</td><td><code>✅ 穩定</code></td><td><a href='https://otn.tcb-bank.com.tw/ACweb/' target='_blank'>造訪</a></td></tr><tr><td>金庫幣</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>54ms</td><td><code>✅ 穩定</code></td><td><a href='https://mpp.tcb-bank.com.tw/' target='_blank'>造訪</a></td></tr><tr><td>Mpos行動收單</td><td><span class='status-badge status-red'>🔥 斷線(連線失敗)</span></td><td>N/A</td><td>0ms</td><td><code>✅ 穩定</code></td><td><a href='https://mpos.tcb-bank.com.tw/erc/Login/Login.aspx' target='_blank'>造訪</a></td></tr><tr><td>信託服務網</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>128ms</td><td><code>✅ 穩定</code></td><td><a href='https://trusts.tcb-bank.com.tw/eTrust/' target='_blank'>造訪</a></td></tr><tr><td>智能理財</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>67ms</td><td><code>✅ 穩定</code></td><td><a href='https://irobo.tcb-bank.com.tw/irobo' target='_blank'>造訪</a></td></tr><tr><td>財管滿意度調查</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>57ms</td><td><code>✅ 穩定</code></td><td><a href='https://wms.tcb-bank.com.tw/' target='_blank'>造訪</a></td></tr><tr><td>小規模營業人諮詢</td><td><span class='status-badge status-yellow'>🟢 存活(回應 500)</span></td><td>N/A</td><td>0ms</td><td><code>✅ 穩定</code></td><td><a href='https://cobank.tcb-bank.com.tw/ELNA/litinput.jsp' target='_blank'>造訪</a></td></tr><tr><td>供應商查詢系統</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>183ms</td><td><code>✅ 穩定</code></td><td><a href='https://mbbank.tcb-bank.com.tw/QSMS/' target='_blank'>造訪</a></td></tr><tr><td>票券保管銀行</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>70ms</td><td><code>✅ 穩定</code></td><td><a href='https://ebills.tcb-bank.com.tw' target='_blank'>造訪</a></td></tr><tr><td>新一代信貸系統</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>41ms</td><td><code>✅ 穩定</code></td><td><a href='https://cobank.tcb-bank.com.tw/TCB.LOAN.SERVICE/PersonalLoan/Index' target='_blank'>造訪</a></td></tr><tr><td>跨境支付特店後台</td><td><span class='status-badge status-green'>🟢 正常</span></td><td></td><td>145ms</td><td><code>✅ 穩定</code></td><td><a href='https://copay.tcb-bank.com.tw/fesnetMP2/' target='_blank'>造訪</a></td></tr></tbody>
+</table>
 </body>
 </html>
