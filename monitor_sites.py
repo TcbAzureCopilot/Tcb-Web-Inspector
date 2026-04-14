@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 
 # =====================================================================
-# 設定區
+# 1. 監控設定區 (可自行增減網站)
 # =====================================================================
 SITES = [
     {"name": "銀行官網", "url": "https://www.google.com", "key": "Google"},
@@ -18,23 +18,27 @@ SITES = [
     {"name": "網路銀行", "url": "https://ebank.tcb-bank.com.tw", "key": "登入"},
 ]
 
+# 檔案路徑與網址設定
 STATE_FILE = "data/site_state.json"
 DASHBOARD_FILE = "index.html"
 GITHUB_IO_URL = "https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/" 
 
 # =====================================================================
-# 深度檢測功能
+# 2. 深度檢測功能 (指紋與 SSL)
 # =====================================================================
+
 def clean_html_for_fingerprint(html):
-    """極致嚴謹：剝除所有代碼，只針對『肉眼可見純文字』進行指紋比對"""
+    """極致嚴謹：剝除所有代碼與標籤，只針對『肉眼可見純文字』進行指紋比對"""
+    # 移除所有腳本與樣式
     html = re.sub(r'<script.*?>.*?</script>', '', html, flags=re.DOTALL|re.IGNORECASE)
     html = re.sub(r'<style.*?>.*?</style>', '', html, flags=re.DOTALL|re.IGNORECASE)
     # 移除所有 HTML 標籤
     text_only = re.sub(r'<[^>]+>', ' ', html)
-    # 將多個空白壓縮成單一空白
+    # 壓縮多餘空白與換行，確保指紋純粹
     return " ".join(text_only.split())
 
 def get_ssl_expiry(url):
+    """強效 SSL 抓取：忽略驗證直接抓取憑證內容算日期"""
     try:
         hostname = url.split("//")[-1].split("/")[0]
         context = ssl.create_default_context()
@@ -47,12 +51,15 @@ def get_ssl_expiry(url):
                 from cryptography import x509
                 from cryptography.hazmat.backends import default_backend
                 cert = x509.load_der_x509_certificate(cert_bin, default_backend())
+                # 計算剩餘天數 (UTC)
                 remaining = cert.not_valid_after_utc.replace(tzinfo=None) - datetime.utcnow()
                 return f"{remaining.days}天"
     except Exception:
         return "N/A"
 
 def check_sites():
+    """執行全站健康與內容掃描"""
+    # 讀取舊狀態紀錄
     old_state = {}
     if os.path.exists(STATE_FILE):
         try:
@@ -63,7 +70,9 @@ def check_sites():
     results = []
     new_state = {}
     is_critical = False
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # 偽裝瀏覽器避免 WAF 阻擋
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
     for site in SITES:
         try:
@@ -71,24 +80,28 @@ def check_sites():
             res = requests.get(site['url'], timeout=25, headers=headers)
             latency = int((time.time() - start_time) * 1000)
             
-            # 純文字指紋計算
+            # 1. 產生乾淨的純文字指紋
             clean_content = clean_html_for_fingerprint(res.text)
             curr_hash = hashlib.sha256(clean_content.encode('utf-8')).hexdigest()[:8]
             
+            # 2. 比對舊指紋
             old_hash = old_state.get(site['name'], {}).get('hash')
-            # 只有當舊資料存在且不同時，才判定為異動
             hash_changed = (old_hash is not None) and (curr_hash != old_hash)
             
+            # 3. 基本健康檢測
             kw_ok = site['key'] in res.text
             ssl_info = get_ssl_expiry(site['url'])
 
+            # 狀態判定邏輯
             status = "🟢 正常"
             finger = f"✅ 穩定({curr_hash})"
             
             if not kw_ok or res.status_code != 200:
+                # 只有斷線或關鍵字消失才視為「危急狀態」
                 status = "🔴 異常 (內容缺失)"
                 is_critical = True
             elif hash_changed:
+                # 內容異動僅視為「警示」
                 status = "🟡 內容異動"
                 finger = f"⚠️ 變動({old_hash}->{curr_hash})"
 
@@ -96,20 +109,30 @@ def check_sites():
                 "name": site['name'], "url": site['url'], "status": status,
                 "ssl": ssl_info, "latency": f"{latency}ms", "fingerprint": finger
             })
+            # 儲存新的指紋供下次比對
             new_state[site['name']] = {"hash": curr_hash}
+            
         except Exception as e:
-            results.append({"name": site['name'], "url": site['url'], "status": "🔥 斷線", "ssl": "N/A", "latency": "0", "fingerprint": "N/A"})
+            # 處理 Timeout 或 DNS 解析失敗等網路層級錯誤
+            results.append({
+                "name": site['name'], "url": site['url'], "status": f"🔥 斷線({type(e).__name__})", 
+                "ssl": "N/A", "latency": "0", "fingerprint": "N/A"
+            })
             is_critical = True
 
+    # 存檔以更新狀態
     os.makedirs("data", exist_ok=True)
     with open(STATE_FILE, 'w') as f:
         json.dump(new_state, f)
+        
     return results, is_critical
 
 # =====================================================================
-# 儀表板更新與通報
+# 3. 儀表板更新與 Teams 通報
 # =====================================================================
+
 def update_html(results):
+    """安全地將結果寫入 index.html (絕不造成檔案無限擴充)"""
     rows = ""
     for r in results:
         style = "status-green"
@@ -119,35 +142,62 @@ def update_html(results):
         rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>\n"""
 
     if os.path.exists(DASHBOARD_FILE):
-        with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        import re
-        # 🌟 關鍵修復：替換內容時，務必把錨點也寫回去，防止無限疊加
-        pattern = r'.*?'
-        replacement = f'\n{rows}'
-        
-        new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
-        
-        update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', 
-                             f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_content)
-
-        with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-            f.write(new_content)
+        try:
+            with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
+                content = f.read()
             
+            # 使用明確的 Split 切割，這是最穩定不吃標籤的方法
+            header_part = content.split('')[0]
+            footer_part = content.split('')[1]
+            
+            new_content = header_part + "\n" + rows + "" + footer_part
+            
+            update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            new_content = re.sub(r'<span id="update-time">.*?</span>', f'<span id="update-time">{update_time}</span>', new_content)
+
+            with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            print("✅ HTML 儀表板已安全更新。")
+        except Exception as e:
+            print(f"❌ HTML 寫入失敗: {e}")
+
 def send_teams(results, is_critical):
+    """向 Microsoft Teams 或 Power Automate 發送結構化告警"""
     webhook = os.environ.get('TEAMS_WEBHOOK_URL')
-    if not webhook: return
-    title = "🚨 系統緊急告警" if is_critical else "✅ 網站運行日報"
+    if not webhook: 
+        print("⚠️ 找不到 TEAMS_WEBHOOK_URL 環境變數，略過發送。")
+        return
+        
+    title = "🚨 系統緊急告警" if is_critical else "✅ 網站巡檢日報"
     table = "| 系統 | 狀態 | SSL | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
     for r in results:
         table += f"| {r['name']} | {r['status']} | {r['ssl']} | {r['latency']} | {r['fingerprint']} |\n"
+        
     payload = {"message": f"## {title}\n\n{table}\n\n[📊 點此查看即時監控儀表板]({GITHUB_IO_URL})"}
-    requests.post(webhook, json=payload)
+    
+    try:
+        res = requests.post(webhook, json=payload, timeout=10)
+        print(f"📤 Teams 發送狀態碼: {res.status_code}")
+    except Exception as e:
+        print(f"❌ Teams 發送失敗: {e}")
+
+# =====================================================================
+# 4. 主程式流程控制
+# =====================================================================
 
 if __name__ == "__main__":
+    print(f"⏰ 啟動監控任務: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # 1. 執行檢測
     data, critical = check_sites()
+    
+    # 2. 更新本地網頁 (稍後由 Action 推送)
     update_html(data)
-    # 為了方便測試，暫時取消整點限制，每次都發 Teams。測試完可以改回 `if critical or datetime.now().minute < 15:`
-    send_teams(data, critical)
+    
+    # 3. 通報判斷
+    current_minute = datetime.now().minute
+    # 預設邏輯：出現緊急狀況，或是每個小時前 15 分鐘 (整點報時) 才發送。
+    if critical or current_minute < 15:
+        send_teams(data, critical)
+    else:
+        print("ℹ️ 系統狀態穩定且非通報週期，靜默執行完畢。")
