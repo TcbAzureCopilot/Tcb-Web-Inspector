@@ -25,21 +25,16 @@ GITHUB_IO_URL = "https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/"
 # =====================================================================
 # 深度檢測功能
 # =====================================================================
-
 def clean_html_for_fingerprint(html):
-    """嚴謹化：剔除網頁中容易變動的隨機內容，避免誤報"""
-    # 移除所有 Script 內容
-    html = re.sub(r'<script.*?>.*?</script>', '', html, flags=re.DOTALL)
-    # 移除所有 Style 內容
-    html = re.sub(r'<style.*?>.*?</style>', '', html, flags=re.DOTALL)
-    # 移除常見的動態 Token (如 CSRF, hidden inputs)
-    html = re.sub(r'<input type="hidden".*?>', '', html)
-    # 移除註解與空白
-    html = re.sub(r'', '', html, flags=re.DOTALL)
-    return "".join(html.split())
+    """極致嚴謹：剝除所有代碼，只針對『肉眼可見純文字』進行指紋比對"""
+    html = re.sub(r'<script.*?>.*?</script>', '', html, flags=re.DOTALL|re.IGNORECASE)
+    html = re.sub(r'<style.*?>.*?</style>', '', html, flags=re.DOTALL|re.IGNORECASE)
+    # 移除所有 HTML 標籤
+    text_only = re.sub(r'<[^>]+>', ' ', html)
+    # 將多個空白壓縮成單一空白
+    return " ".join(text_only.split())
 
 def get_ssl_expiry(url):
-    """使用更強大的方式解析 SSL 效期"""
     try:
         hostname = url.split("//")[-1].split("/")[0]
         context = ssl.create_default_context()
@@ -52,11 +47,10 @@ def get_ssl_expiry(url):
                 from cryptography import x509
                 from cryptography.hazmat.backends import default_backend
                 cert = x509.load_der_x509_certificate(cert_bin, default_backend())
-                # 取得剩餘天數
                 remaining = cert.not_valid_after_utc.replace(tzinfo=None) - datetime.utcnow()
                 return f"{remaining.days}天"
     except Exception:
-        return "檢測中"
+        return "N/A"
 
 def check_sites():
     old_state = {}
@@ -77,34 +71,33 @@ def check_sites():
             res = requests.get(site['url'], timeout=25, headers=headers)
             latency = int((time.time() - start_time) * 1000)
             
-            # 指紋計算 (嚴謹版)
+            # 純文字指紋計算
             clean_content = clean_html_for_fingerprint(res.text)
-            curr_hash = hashlib.sha256(clean_content.encode('utf-8')).hexdigest()[:12]
+            curr_hash = hashlib.sha256(clean_content.encode('utf-8')).hexdigest()[:8]
             
             old_hash = old_state.get(site['name'], {}).get('hash')
-            hash_changed = old_hash and curr_hash != old_hash
+            # 只有當舊資料存在且不同時，才判定為異動
+            hash_changed = (old_hash is not None) and (curr_hash != old_hash)
             
-            # 關鍵字檢查
             kw_ok = site['key'] in res.text
             ssl_info = get_ssl_expiry(site['url'])
 
             status = "🟢 正常"
-            finger = "✅ 穩定"
+            finger = f"✅ 穩定({curr_hash})"
             
-            # 只有當「斷線」或「關鍵字消失」才發緊急告警
             if not kw_ok or res.status_code != 200:
                 status = "🔴 異常 (內容缺失)"
                 is_critical = True
             elif hash_changed:
                 status = "🟡 內容異動"
-                finger = f"⚠️ 變動({curr_hash})"
+                finger = f"⚠️ 變動({old_hash}->{curr_hash})"
 
             results.append({
                 "name": site['name'], "url": site['url'], "status": status,
                 "ssl": ssl_info, "latency": f"{latency}ms", "fingerprint": finger
             })
             new_state[site['name']] = {"hash": curr_hash}
-        except Exception:
+        except Exception as e:
             results.append({"name": site['name'], "url": site['url'], "status": "🔥 斷線", "ssl": "N/A", "latency": "0", "fingerprint": "N/A"})
             is_critical = True
 
@@ -114,7 +107,7 @@ def check_sites():
     return results, is_critical
 
 # =====================================================================
-# 3. 儀表板更新邏輯 (修正切分錯誤)
+# 儀表板更新與通報
 # =====================================================================
 def update_html(results):
     rows = ""
@@ -123,29 +116,22 @@ def update_html(results):
         if "異常" in r['status'] or "斷線" in r['status']: style = "status-red"
         elif "異動" in r['status']: style = "status-yellow"
         
-        rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>"""
+        rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>\n"""
 
     if os.path.exists(DASHBOARD_FILE):
         with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         
-        # 🌟 終極防彈版：使用正規表達式直接覆蓋，絕對不會有 empty separator 的問題
-        import re
-        
-        # 尋找 到 之間的所有內容並替換
+        # 安全的替換邏輯
         pattern = r'.*?'
-        replacement = f'\n<tbody id="table-body">\n{rows}\n</tbody>\n'
+        replacement = f'\n{rows}'
+        content = re.sub(pattern, replacement, content, flags=re.DOTALL)
         
-        # 執行表格替換
-        new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
-        
-        # 執行時間替換
         update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', 
-                             f'LAST UPDATE: <span id="update-time">{update_time}</span>', new_content)
+        content = re.sub(r'LAST UPDATE: <span id="update-time">.*?</span>', f'LAST UPDATE: <span id="update-time">{update_time}</span>', content)
 
         with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-            f.write(new_content)
+            f.write(content)
 
 def send_teams(results, is_critical):
     webhook = os.environ.get('TEAMS_WEBHOOK_URL')
@@ -160,5 +146,5 @@ def send_teams(results, is_critical):
 if __name__ == "__main__":
     data, critical = check_sites()
     update_html(data)
-    if critical or datetime.now().minute < 15:
-        send_teams(data, critical)
+    # 為了方便測試，暫時取消整點限制，每次都發 Teams。測試完可以改回 `if critical or datetime.now().minute < 15:`
+    send_teams(data, critical)
