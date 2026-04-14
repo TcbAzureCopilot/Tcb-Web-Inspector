@@ -11,11 +11,34 @@ from datetime import datetime
 # =====================================================================
 # 1. 監控設定區 (可自行增減網站)
 # =====================================================================
+# =====================================================================
+# 1. 監控設定區 (合庫正式系統全清單)
+# =====================================================================
 SITES = [
-    {"name": "銀行官網", "url": "https://www.google.com", "key": "Google"},
-    {"name": "合作金庫", "url": "https://www.tcb-bank.com.tw", "key": "合作金庫"},
-    {"name": "台灣銀行", "url": "https://www.bot.com.tw", "key": "臺灣銀行"},
-    {"name": "網路銀行", "url": "https://ebank.tcb-bank.com.tw", "key": "登入"},
+    {"name": "銀行官網", "url": "https://www.tcb-bank.com.tw/", "key": "合作金庫"},
+    {"name": "合庫金控官網", "url": "https://www.tcfhc.com.tw/", "key": "合庫金控"},
+    {"name": "個人網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/", "key": "登入"},
+    {"name": "網路銀行", "url": "https://cobank.tcb-bank.com.tw", "key": "登入"},
+    {"name": "企業網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.CORP.WEB/", "key": "登入"},
+    {"name": "合庫銀行eATM", "url": "https://eatm.tcb-bank.com.tw", "key": "晶片金融卡"},
+    {"name": "金邊分行網銀", "url": "https://ebankkh.tcb-bank.com.tw:446", "key": "Login"},
+    {"name": "香港網銀入口", "url": "https://ebank.tcb-bank.com.hk/TCB.HKNB.CORP.WEB/bank.jsp", "key": "Hong Kong"},
+    {"name": "大陸網銀", "url": "https://cobank.tcbbk.com.cn", "key": "登入"},
+    {"name": "全球金融網", "url": "https://feoi.tcb-bank.com.tw", "key": "全球金融網"},
+    {"name": "媒體檔案傳輸", "url": "https://webftp.tcb-bank.com.tw/FileTrans/viewLoginDmz.action", "key": "密碼"},
+    {"name": "電子代收系統", "url": "https://ars.tcb-bank.com.tw/", "key": "代收"},
+    {"name": "招標採購公告", "url": "https://ebulletin.tcb-bank.com.tw/bulletin-web/", "key": "招標"},
+    {"name": "線上取號系統", "url": "https://otn.tcb-bank.com.tw/ACweb/", "key": "取號"},
+    {"name": "金庫幣", "url": "https://mpp.tcb-bank.com.tw/", "key": "金庫幣"},
+    {"name": "Mpos行動收單", "url": "https://mpos.tcb-bank.com.tw/erc/Login/Login.aspx", "key": "登入"},
+    {"name": "信託服務網", "url": "https://trusts.tcb-bank.com.tw/eTrust/", "key": "信託"},
+    {"name": "智能理財", "url": "https://irobo.tcb-bank.com.tw/irobo", "key": "理財"},
+    {"name": "財管滿意度調查", "url": "https://wms.tcb-bank.com.tw/", "key": "調查"},
+    {"name": "小規模營業人諮詢", "url": "https://cobank.tcb-bank.com.tw/ELNA/litinput.jsp", "key": "諮詢"},
+    {"name": "供應商查詢系統", "url": "https://mbbank.tcb-bank.com.tw/QSMS/", "key": "供應商"},
+    {"name": "票券保管銀行", "url": "https://ebills.tcb-bank.com.tw", "key": "票券"},
+    {"name": "新一代信貸系統", "url": "https://cobank.tcb-bank.com.tw/TCB.LOAN.SERVICE/PersonalLoan/Index", "key": "信貸"},
+    {"name": "跨境支付特店後台", "url": "https://copay.tcb-bank.com.tw/fesnetMP2/", "key": "特約商店"}
 ]
 
 # 檔案路徑與網址設定
