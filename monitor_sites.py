@@ -6,156 +6,168 @@ import json
 import os
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+import urllib3
 
-# 關閉 requests 的 SSL 警告
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+# 關閉 SSL 警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # =====================================================================
-# 1. 監控設定區 
+# 1. 監控設定區 (同步地端 32 個站點)
 # =====================================================================
 SITES = [
-    {"name": "銀行官網", "url": "https://www.tcb-bank.com.tw/", "key": "合作金庫"},
-    {"name": "合庫金控官網", "url": "https://www.tcfhc.com.tw/", "key": "合庫金控"},
-    {"name": "個人網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/", "key": ""},
-    {"name": "網路銀行", "url": "https://cobank.tcb-bank.com.tw", "key": ""},
-    {"name": "企業網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.CORP.WEB/", "key": ""},
-    {"name": "合庫銀行eATM", "url": "https://eatm.tcb-bank.com.tw", "key": ""},
-    {"name": "金邊分行網銀", "url": "https://ebankkh.tcb-bank.com.tw:446", "key": ""},
-    {"name": "香港網銀入口", "url": "https://ebank.tcb-bank.com.hk/TCB.HKNB.CORP.WEB/bank.jsp", "key": ""},
-    {"name": "大陸網銀", "url": "https://cobank.tcbbk.com.cn", "key": ""},
-    {"name": "全球金融網", "url": "https://feoi.tcb-bank.com.tw", "key": ""},
-    {"name": "媒體檔案傳輸", "url": "https://webftp.tcb-bank.com.tw/FileTrans/viewLoginDmz.action", "key": ""},
-    {"name": "電子代收系統", "url": "https://ars.tcb-bank.com.tw/", "key": ""},
-    {"name": "招標採購公告", "url": "https://ebulletin.tcb-bank.com.tw/bulletin-web/", "key": ""},
-    {"name": "線上取號系統", "url": "https://otn.tcb-bank.com.tw/ACweb/", "key": ""},
-    {"name": "金庫幣", "url": "https://mpp.tcb-bank.com.tw/", "key": ""},
-    {"name": "Mpos行動收單", "url": "https://mpos.tcb-bank.com.tw/erc/Login/Login.aspx", "key": ""},
-    {"name": "信託服務網", "url": "https://trusts.tcb-bank.com.tw/eTrust/", "key": "信託"},
-    {"name": "智能理財", "url": "https://irobo.tcb-bank.com.tw/irobo", "key": ""},
-    {"name": "財管滿意度調查", "url": "https://wms.tcb-bank.com.tw/", "key": ""},
-    {"name": "小規模營業人諮詢", "url": "https://cobank.tcb-bank.com.tw/ELNA/litinput.jsp", "key": ""},
-    {"name": "供應商查詢系統", "url": "https://mbbank.tcb-bank.com.tw/QSMS/", "key": ""},
-    {"name": "票券保管銀行", "url": "https://ebills.tcb-bank.com.tw", "key": ""},
-    {"name": "新一代信貸系統", "url": "https://cobank.tcb-bank.com.tw/TCB.LOAN.SERVICE/PersonalLoan/Index", "key": ""},
-    {"name": "跨境支付特店後台", "url": "https://copay.tcb-bank.com.tw/fesnetMP2/", "key": ""}
+    {"id": 1,  "dept": "OA", "name": "銀行官網", "url": "https://www.tcb-bank.com.tw/"},
+    {"id": 2,  "dept": "OA", "name": "合庫金控官網", "url": "https://www.tcfhc.com.tw/"},
+    {"id": 3,  "dept": "EA", "name": "個人網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/"},
+    {"id": 4,  "dept": "EA", "name": "網路銀行", "url": "https://cobank.tcb-bank.com.tw"},
+    {"id": 5,  "dept": "EA", "name": "個人網銀-信用卡/金融卡專區", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/ccConsole.jsp"},
+    {"id": 6,  "dept": "EA", "name": "企業網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.CORP.WEB/"},
+    {"id": 7,  "dept": "EA", "name": "合庫銀行eATM", "url": "https://eatm.tcb-bank.com.tw"},
+    {"id": 8,  "dept": "EA", "name": "金邊分行網銀", "url": "https://ebankkh.tcb-bank.com.tw:446/TCB.PPNB.CORP.WEB/bank.faces"},
+    {"id": 9,  "dept": "EA", "name": "香港網銀入口", "url": "https://ebank.tcb-bank.com.hk/TCB.HKNB.CORP.WEB/bank.jsp"},
+    {"id": 10, "dept": "EA", "name": "大陸網銀", "url": "https://cobank.tcbbk.com.cn"},
+    {"id": 11, "dept": "EA", "name": "合作金庫全球金融網", "url": "https://feoi.tcb-bank.com.tw"},
+    {"id": 12, "dept": "OA", "name": "智能客服", "url": "https://robot.tcb-bank.com.tw/Webhook/"},
+    {"id": 13, "dept": "OA", "name": "媒體檔案傳輸系統", "url": "https://webftp.tcb-bank.com.tw/FileTrans/viewLoginDmz.action"},
+    {"id": 14, "dept": "OA", "name": "學費代收系統", "url": "https://ars.tcb-bank.com.tw/"},
+    {"id": 15, "dept": "OA", "name": "招標採購公告系統", "url": "https://ebulletin.tcb-bank.com.tw/bulletin-web/"},
+    {"id": 16, "dept": "OA", "name": "合作金庫-線上取號", "url": "https://otn.tcb-bank.com.tw/ACweb/"},
+    {"id": 17, "dept": "OA", "name": "數位學習", "url": "https://tcb-elearning.tcb-bank.com.tw/RWD/LoginPage.aspx"},
+    {"id": 18, "dept": "AP4", "name": "金庫幣", "url": "https://mpp.tcb-bank.com.tw/"},
+    {"id": 19, "dept": "AP4", "name": "Mpos行動收單", "url": "https://mpos.tcb-bank.com.tw/erc/Login/Login.aspx"},
+    {"id": 20, "dept": "AP4", "name": "EPGW(電子化繳費平台)", "url": "https://epgw.tcb-bank.com.tw/epgw-madm/"},
+    {"id": 21, "dept": "AP4", "name": "信託服務網", "url": "https://trusts.tcb-bank.com.tw/eTrust/"},
+    {"id": 22, "dept": "AP4", "name": "智能理財", "url": "https://irobo.tcb-bank.com.tw/irobo"},
+    {"id": 23, "dept": "AP4", "name": "財管滿意度調查", "url": "https://wms.tcb-bank.com.tw/"},
+    {"id": 24, "dept": "AP3", "name": "企業線上諮詢", "url": "https://cobank.tcb-bank.com.tw/ELNA/epinput.jsp"},
+    {"id": 25, "dept": "AP3", "name": "微企合E貸線上諮詢", "url": "https://cobank.tcb-bank.com.tw/ELNA/esinput.jsp"},
+    {"id": 26, "dept": "EA", "name": "e帳單代收系統", "url": "https://ebilling.tcb-bank.com.tw"},
+    {"id": 27, "dept": "EA", "name": "供應商查詢系統", "url": "https://mbbank.tcb-bank.com.tw/QSMS/"},
+    {"id": 28, "dept": "EA", "name": "金融友善服務專區", "url": "https://cobank.tcb-bank.com.tw/TCB.BFNB.IDV.WEB"},
+    {"id": 29, "dept": "EA", "name": "票券保管銀行", "url": "https://ebills.tcb-bank.com.tw/ebills/logins"},
+    {"id": 30, "dept": "EA", "name": "新一代信貸系統", "url": "https://cobank.tcb-bank.com.tw/TCB.LOAN.SERVICE/PersonalLoan/Index"},
+    {"id": 31, "dept": "EA", "name": "跨境支付特店後台", "url": "https://copay.tcb-bank.com.tw/fesnetMP2/"},
+    {"id": 32, "dept": "AP3", "name": "客戶滿意度問卷系統", "url": "https://css.tcb-bank.com.tw/"}
 ]
 
-STATE_FILE = "data/site_state.json"
+STATE_FILE = "data/fingerprints.json"
 DASHBOARD_FILE = "index.html"
-GITHUB_IO_URL = "https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/" 
+TEAMS_WEBHOOK = os.environ.get('TEAMS_WEBHOOK_URL')
 
 # =====================================================================
-# 2. 深度檢測與寬容判定
+# 2. 檢測邏輯 (同步地端 ps1 算法)
 # =====================================================================
 
-def clean_html(html):
-    html = re.sub(r'<script.*?>.*?</script>', '', html, flags=re.DOTALL|re.IGNORECASE)
-    html = re.sub(r'<style.*?>.*?</style>', '', html, flags=re.DOTALL|re.IGNORECASE)
-    return " ".join(re.sub(r'<[^>]+>', ' ', html).split())
+def clean_html_content(html):
+    """移除 Script, Style 與標籤，模擬地端 -replace 邏輯"""
+    html = re.sub(r'(?is)<script.*?</script>', '', html)
+    html = re.sub(r'(?is)<style.*?</style>', '', html)
+    html = re.sub(r'(?s)<[^>]+>', '', html)
+    return "".join(html.split())
 
-def get_ssl_expiry(url):
+def get_ssl_days(url):
+    """計算 SSL 剩餘天數"""
     try:
-        hostname = url.split("//")[-1].split("/")[0]
+        hostname = url.split("//")[-1].split("/")[0].split(":")[0]
+        port = 443
+        if ":446" in url: port = 446
         context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        with socket.create_connection((hostname, 443), timeout=5) as sock:
+        with socket.create_connection((hostname, port), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                cert_bin = ssock.getpeercert(True)
-                from cryptography import x509
-                from cryptography.hazmat.backends import default_backend
-                cert = x509.load_der_x509_certificate(cert_bin, default_backend())
-                remaining = cert.not_valid_after_utc.replace(tzinfo=None) - datetime.utcnow()
+                cert = ssock.getpeercert()
+                expiry_date = datetime.strptime(cert['notAfter'], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+                remaining = expiry_date - datetime.now(timezone.utc)
                 return f"{remaining.days}天"
-    except Exception: return "N/A"
+    except: return "N/A"
 
 def check_sites():
-    old_state = {}
+    # 載入歷史指紋
+    baseline = {}
     if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, 'r') as f: old_state = json.load(f)
-        except: pass
+        with open(STATE_FILE, 'r', encoding='utf-8') as f: baseline = json.load(f)
 
     results = []
-    new_state = {}
-    is_critical = False
-    
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'}
+    critical_count = 0
+    new_baseline = {}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8'
+    }
 
     for site in SITES:
-        try:
-            start_time = time.time()
-            res = requests.get(site['url'], timeout=20, headers=headers, verify=False)
-            latency = int((time.time() - start_time) * 1000)
-            
-            clean_content = clean_html(res.text)
-            curr_hash = hashlib.sha256(clean_content.encode('utf-8')).hexdigest()[:8]
-            old_hash = old_state.get(site['name'], {}).get('hash')
-            hash_changed = (old_hash is not None) and (curr_hash != old_hash)
-            
-            ssl_info = get_ssl_expiry(site['url'])
-
-            # 🌟 狀態判定邏輯升級
-            if res.status_code in [200, 401, 403, 404]:
-                kw_ok = (site['key'] == "") or (site['key'] in res.text)
-                if not kw_ok and res.status_code == 200:
-                    status = "🟡 內容異動(無關鍵字)"
-                    finger = f"⚠️ ({curr_hash})"
-                elif res.status_code != 200:
-                    status = f"🟢 存活(WAF回應 {res.status_code})"
-                    finger = "✅ 穩定"
-                else:
-                    status = "🟢 正常"
-                    finger = "✅ 穩定"
-            elif res.status_code == 500:
-                # HTTP 500 代表伺服器活著，只是程式報錯，不亮紅燈
-                status = "🟡 存活(系統報錯500)"
-                finger = "N/A"
-            else:
-                status = f"🔴 異常 (HTTP {res.status_code})"
-                finger = "N/A"
-                is_critical = True
-
-            results.append({
-                "name": site['name'], "url": site['url'], "status": status,
-                "ssl": ssl_info, "latency": f"{latency}ms", "fingerprint": finger
-            })
-            new_state[site['name']] = {"hash": curr_hash}
-            
-        except requests.exceptions.SSLError:
-            # 🌟 抓到了！底層協定不通但伺服器存活
-            results.append({"name": site['name'], "url": site['url'], "status": "🟢 存活(SSL交握阻擋)", "ssl": "N/A", "latency": "阻擋", "fingerprint": "N/A"})
-        except requests.exceptions.Timeout:
-            # 🌟 物理阻擋，標示清楚不再報錯
-            results.append({"name": site['name'], "url": site['url'], "status": "⚪ 境外阻擋(伺服器預設)", "ssl": "N/A", "latency": "Timeout", "fingerprint": "N/A"})
-        except Exception as e:
-            results.append({"name": site['name'], "url": site['url'], "status": f"🔥 斷線({type(e).__name__})", "ssl": "N/A", "latency": "0", "fingerprint": "N/A"})
-            is_critical = True
-
-    os.makedirs("data", exist_ok=True)
-    with open(STATE_FILE, 'w') as f: json.dump(new_state, f)
+        status = "🟢 正常"
+        latency = 0
+        finger = "N/A"
+        ssl_val = get_ssl_days(site['url'])
         
-    return results, is_critical
+        try:
+            timeout = 45 if ("Mpos" in site['name'] or ":446" in site['url']) else 20
+            start = time.time()
+            res = requests.get(site['url'], timeout=timeout, headers=headers, verify=False, allow_redirects=True)
+            latency = int((time.time() - start) * 1000)
+
+            # 指紋計算
+            content_text = clean_html_content(res.text)
+            finger = hashlib.sha256(content_text.encode('utf-8')).hexdigest()[:8]
+            new_baseline[site['name']] = finger
+            
+            # 比對指紋
+            if site['name'] in baseline and baseline[site['name']] != finger:
+                status = "🟠 內容異動"
+
+            # 狀態碼判定 (同步 ps1 邏輯)
+            if res.status_code != 200:
+                if res.status_code >= 500:
+                    status = f"🔥 服務錯誤({res.status_code})"
+                    critical_count += 1
+                elif res.status_code in [401, 403, 404]:
+                    status = f"🟢 存活(WAF回應 {res.status_code})"
+                else:
+                    status = f"🟡 有回應({res.status_code})"
+
+        except requests.exceptions.Timeout:
+            status = "⚪ 境外阻擋(Timeout)"
+            latency = "Timeout"
+        except Exception as e:
+            status = "🔥 斷線(連線失敗)"
+            critical_count += 1
+            latency = 0
+
+        results.append({
+            "id": site['id'], "dept": site['dept'], "name": site['name'],
+            "status": status, "latency": f"{latency}ms" if isinstance(latency, int) else latency,
+            "ssl": ssl_val, "finger": finger, "url": site['url']
+        })
+
+    # 存回指紋
+    os.makedirs("data", exist_ok=True)
+    with open(STATE_FILE, 'w', encoding='utf-8') as f: json.dump(new_baseline, f)
+
+    return results, critical_count
 
 # =====================================================================
-# 3. 儀表板與通報
+# 3. 更新 HTML 與通報
 # =====================================================================
 
-def update_html(results):
+def update_dashboard(results):
     rows = ""
     for r in results:
         style = "status-green"
-        if "異常" in r['status'] or "斷線" in r['status']: style = "status-red"
-        elif "異動" in r['status'] or "存活(" in r['status']: style = "status-yellow"
-        if "境外阻擋" in r['status']: style = "status-yellow"
+        if "斷線" in r['status'] or "錯誤" in r['status']: style = "status-red"
+        elif "存活" in r['status'] or "異動" in r['status'] or "阻擋" in r['status']: style = "status-yellow"
         
-        rows += f"""<tr><td>{r['name']}</td><td><span class="status-badge {style}">{r['status']}</span></td><td>{r['ssl']}</td><td>{r['latency']}</td><td><code>{r['fingerprint']}</code></td><td><a href="{r['url']}" target="_blank">造訪</a></td></tr>\n"""
+        rows += f"""<tr>
+            <td>{r['id']}</td>
+            <td>{r['dept']}</td>
+            <td>{r['name']}</td>
+            <td><span class="status-badge {style}">{r['status']}</span></td>
+            <td>{r['latency']}</td>
+            <td><code>{r['finger']}</code></td>
+            <td><a href="{r['url']}" target="_blank">造訪</a></td>
+        </tr>\n"""
 
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    html_content = f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -163,73 +175,65 @@ def update_html(results):
     <title>TCB WEB INSPECTOR</title>
     <style>
         body {{ background: #0b0e14; color: #c9d1d9; font-family: sans-serif; padding: 20px; }}
-        .dashboard-table {{ width: 100%; border-collapse: collapse; background: #161b22; box-shadow: 0 0 20px rgba(0,0,0,0.5); }}
-        .dashboard-table th, td {{ border: 1px solid #30363d; padding: 15px; text-align: left; }}
-        .dashboard-table th {{ background: #1f242c; color: #00f2ff; }}
+        .dashboard-table {{ width: 100%; border-collapse: collapse; background: #161b22; margin-top: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }}
+        .dashboard-table th, td {{ border: 1px solid #30363d; padding: 12px; text-align: left; }}
+        .dashboard-table th {{ background: #1f242c; color: #00f2ff; font-size: 14px; }}
         .status-badge {{ padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }}
-        .status-green {{ color: #2ecc71; border: 1px solid #2ecc71; }}
-        .status-yellow {{ color: #f1c40f; border: 1px solid #f1c40f; }}
-        .status-red {{ color: #e74c3c; border: 1px solid #e74c3c; }}
-        .accent {{ color: #00f2ff; text-shadow: 0 0 5px #00f2ff; letter-spacing: 2px; }}
+        .status-green {{ color: #2ecc71; border: 1px solid #2ecc71; background: rgba(46,204,113,0.1); }}
+        .status-yellow {{ color: #f1c40f; border: 1px solid #f1c40f; background: rgba(241,196,15,0.1); }}
+        .status-red {{ color: #e74c3c; border: 1px solid #e74c3c; background: rgba(231,76,60,0.1); }}
         a {{ color: #00f2ff; text-decoration: none; }}
-        a:hover {{ text-decoration: underline; }}
-        /* 🌟 說明區塊的 CSS */
-        .info-panel {{ margin-top: 30px; padding: 20px; background: #161b22; border-left: 4px solid #00f2ff; color: #8b949e; font-size: 14px; line-height: 1.8; box-shadow: 0 0 10px rgba(0,0,0,0.3); }}
-        .info-panel strong {{ color: #c9d1d9; }}
+        code {{ color: #a5d6ff; font-family: monospace; font-size: 14px; }}
+        .accent {{ color: #00f2ff; letter-spacing: 2px; text-shadow: 0 0 5px #00f2ff; }}
+        .info-panel {{ margin-top: 30px; padding: 20px; background: #161b22; border-left: 4px solid #00f2ff; color: #8b949e; font-size: 14px; line-height: 1.8; }}
     </style>
 </head>
 <body>
     <h1 class="accent">TCB WEB MONITORING CENTER</h1>
-    <p>
-        LAST UPDATE: <span id="update-time">{update_time}</span> | 
-        <span style="color: #8b949e;">距離下次重整: <span id="secs">60</span>s</span>
-    </p>
+    <p>LAST UPDATE: {update_time} | 距離下一次重整: <span id="secs" style="color:#00f2ff">60</span>s</p>
     <table class="dashboard-table">
-        <thead><tr><th>系統名稱</th><th>當前狀態</th><th>SSL 效期</th><th>回應延遲</th><th>指紋狀態</th><th>快速連結</th></tr></thead>
-        <tbody id="table-body">
-{rows}
-        </tbody>
+        <thead><tr><th>序號</th><th>科別</th><th>系統名稱</th><th>當前狀態</th><th>回應延遲</th><th>指紋狀態</th><th>系統連結</th></tr></thead>
+        <tbody>{rows}</tbody>
     </table>
-    
     <div class="info-panel">
-        <strong style="color:#00f2ff; font-size: 16px;">[ 系統指標與檢測邏輯說明 ]</strong><br>
-        <strong>• 當前狀態：</strong>綜合判定 HTTP 狀態碼與內容關鍵字。收到 403/404 等 WAF 防火牆阻擋視為「系統存活」，500 視為「後端報錯」，TCP Timeout 則標記為「境外阻擋」。<br>
-        <strong>• SSL 效期：</strong>繞過中繼代理，直接透過 Port 443 與終端伺服器進行底層交握，解析 X.509 憑證並計算至 UTC 到期日之剩餘天數。<br>
-        <strong>• 回應延遲：</strong>記錄從發出 HTTP GET 請求起，至收到伺服器初始回應 (Headers) 的絕對時間差 (以毫秒 ms 計)。<br>
-        <strong>• 指紋狀態：</strong>自動剝除網頁中的程式碼 (Script)、樣式表 (CSS) 與 HTML 標籤，僅針對「肉眼可見純文字」進行 SHA-256 雜湊運算。若雜湊值變更即觸發異動警示 (防誤報設計)。
+        <strong style="color:#00f2ff">[ 系統指標與檢測邏輯說明 ]</strong><br>
+        • <strong>當前狀態：</strong>綜合判定 HTTP 狀態碼。收到 403/404 等 WAF 防火牆阻擋視為「系統存活」，500 視為「後端報錯」。<br>
+        • <strong>回應延遲：</strong>記錄從發出 HTTP GET 請求起，至收到伺服器初始回應的絕對時間差 (ms)。<br>
+        • <strong>指紋狀態：</strong>自動剝除程式碼與 HTML 標籤，針對純文字進行 SHA-256 雜湊運算。若變更即觸發異動警示。<br>
+        • <strong>自動更新：</strong>由 GitHub Actions 定時執行巡檢並同步至此網頁。
     </div>
-
     <script>
         let timeLeft = 60;
         setInterval(() => {{
             timeLeft--;
-            document.getElementById('secs').innerText = timeLeft;
+            let el = document.getElementById('secs');
+            if(el) el.innerText = timeLeft;
             if (timeLeft <= 0) location.reload();
         }}, 1000);
     </script>
 </body>
 </html>"""
+    with open(DASHBOARD_FILE, 'w', encoding='utf-8') as f: f.write(html)
 
-    with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
-        f.write(html_content)
-
-def send_teams(results, is_critical):
-    webhook = os.environ.get('TEAMS_WEBHOOK_URL')
-    if not webhook: return
+def notify_teams(results, critical_count):
+    if not TEAMS_WEBHOOK: return
+    is_critical = critical_count > 0
+    current_min = datetime.now().minute
+    
+    # 邏輯：有異常立刻報，否則每小時前 15 分鐘報一次
+    if is_critical or current_min < 15:
+        title = "🚨 **TCB 系統巡檢告警：部分異常**" if is_critical else "✅ **TCB 系統巡檢日報：全數正常**"
+        table = "| 系統 | 狀態 | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- |\n"
+        for r in results:
+            table += f"| {r['name']} | {r['status']} | {r['latency']} | {r['finger']} |\n"
         
-    title = "🚨 系統緊急告警" if is_critical else "✅ 網站巡檢日報"
-    table = "| 系統 | 狀態 | SSL | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
-    for r in results:
-        table += f"| {r['name']} | {r['status']} | {r['ssl']} | {r['latency']} | {r['fingerprint']} |\n"
-        
-    payload = {"message": f"## {title}\n\n{table}\n\n[📊 點此查看即時監控儀表板]({GITHUB_IO_URL})"}
-    try: requests.post(webhook, json=payload, timeout=10)
-    except: pass
+        payload = {
+            "message": f"{title} <br>-----------------------------------<br> **檢測時間**：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} <br> **異常數量**：{critical_count} <br><br> {table} <br> [📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
+        }
+        try: requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
+        except: pass
 
 if __name__ == "__main__":
-    data, critical = check_sites()
-    update_html(data)
-    
-    current_minute = datetime.now().minute
-    #if critical or current_minute < 15:
-    send_teams(data, critical)
+    res_data, crit_cnt = check_sites()
+    update_dashboard(res_data)
+    notify_teams(res_data, crit_cnt)
