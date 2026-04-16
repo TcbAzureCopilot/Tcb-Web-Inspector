@@ -1,0 +1,30 @@
+name: AIOps Scheduled Monitor
+
+on:
+  # 允許從外部 API 觸發 (這是重點)
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 檢出程式碼
+        uses: actions/checkout@v3
+
+      - name: 執行巡檢腳本
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 使用 Actions 內建 Token
+          TEAMS_WEBHOOK: "你的_Power_Automate_網址"
+        run: |
+          # 這裡貼入你 ps1 裡面的核心檢測邏輯
+          # 注意：在 GitHub 環境不需要設定 Proxy
+          # 腳本執行完畢後直接生成 index.html
+          
+      - name: 更新網頁檔案
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add index.html
+          git commit -m "Auto: Update dashboard via Local Trigger" || echo "No changes to commit"
+          git push
