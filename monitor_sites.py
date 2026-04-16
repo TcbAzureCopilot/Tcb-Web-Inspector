@@ -203,29 +203,25 @@ def update_dashboard(results):
     with open(DASHBOARD_FILE, 'w', encoding='utf-8') as f: f.write(html)
 
 def notify_teams(results, critical_count):
-    if not TEAMS_WEBHOOK: 
-        print("未設定 TEAMS_WEBHOOK_URL，略過通報。")
-        return
-        
-    is_critical = critical_count > 0
-    current_min = datetime.now().minute
+    if not TEAMS_WEBHOOK: return
+    is_crit = critical_count > 0
     
-    if is_critical or current_min < 15:
-        title = "🚨 **TCB 系統巡檢告警**" if is_critical else "✅ **TCB 系統巡檢日報**"
+    if is_crit or datetime.now().minute < 15:
+        title = "🚨 **TCB 系統巡檢告警**" if is_crit else "✅ **TCB 系統巡檢日報**"
+        
+        # 嚴格使用 \n 換行建立 Markdown 表格
         table = "| 序號 | 系統 | 狀態 | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
-        for r in results:
+        for r in results: 
             table += f"| {r['id']} | {r['name']} | {r['status']} | {r['latency']} | {r['finger']} |\n"
         
-        payload = {
-            "message": f"{title} <br> 異常數量：{critical_count} <br><br> {table} <br> [📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
-        }
+        # 絕對不能混用 <br>，全部改用 \n\n 來做段落分隔
+        msg = f"{title}\n\n**異常數量**：{critical_count}\n\n{table}\n\n[📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
         
+        payload = {"message": msg}
         try: 
-            res = requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
-            if res.status_code == 200:
-                print("✅ Teams 通報發送成功！")
+            requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
         except Exception as e: 
-            print(f"❌ Teams 發送失敗: {e}")
+            print(f"Teams 發送失敗: {e}")
 
 if __name__ == "__main__":
     res_data, crit_cnt = check_sites()
