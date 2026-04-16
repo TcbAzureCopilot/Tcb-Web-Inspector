@@ -27,4 +27,9 @@ jobs:
           git config --local user.name "GitHub Action"
           git add index.html
           git commit -m "Auto: Update dashboard via Local Trigger" || echo "No changes to commit"
+      - name: 執行巡檢腳本 (使用最新的 Python 版)
+        env:
+          # 關鍵：這行就像是把 Webhook 網址塞進 Python 的口袋裡
+          TEAMS_WEBHOOK_URL: ${{ https://defaultba8fa0ba104a445b8f4cd3194b3140.bb.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/69e1e744ff084a888b5b28a44e0d71a5/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=WfGQlnW_p8SVIgrxEjy3DipM85haVMyqZ7Q3j4bVf5Y }}
+        run: python monitor_sites.py
           git push
