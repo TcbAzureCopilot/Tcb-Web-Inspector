@@ -1,7 +1,6 @@
 name: AIOps Scheduled Monitor
 
 on:
-  # 允許從外部 API (你的地端電腦) 觸發
   workflow_dispatch:
 
 permissions:
@@ -24,7 +23,7 @@ jobs:
 
       - name: 執行巡檢腳本 (包含 Teams 通報)
         env:
-          # 直接使用你的 Webhook 網址 (記得用雙引號包起來)
+          # 直接貼上網址，不要加 ${{ }} 符號，那會導致語法錯誤
           TEAMS_WEBHOOK_URL: "https://defaultba8fa0ba104a445b8f4cd3194b3140.bb.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/69e1e744ff084a888b5b28a44e0d71a5/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=WfGQlnW_p8SVIgrxEjy3DipM85haVMyqZ7Q3j4bVf5Y"
         run: python monitor_sites.py
 
@@ -32,6 +31,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add index.html data/fingerprints.json
-          git commit -m "Auto: Update by Local Trigger" || echo "No changes to commit"
+          # 強制抓取所有變動，包含 data/fingerprints.json
+          git add .
+          git commit -m "Auto: Update by Local Trigger [$(date)]" || echo "No changes to commit"
           git push
