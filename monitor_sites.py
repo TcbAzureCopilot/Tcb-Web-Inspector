@@ -13,7 +13,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # =====================================================================
-# 1. 監控設定區 (同步地端 32 個站點)
+# 1. 監控設定區 (同步地端 32 個站點，包含 ID 與 Dept)
 # =====================================================================
 SITES = [
     {"id": 1,  "dept": "OA", "name": "銀行官網", "url": "https://www.tcb-bank.com.tw/"},
@@ -55,67 +55,47 @@ DASHBOARD_FILE = "index.html"
 TEAMS_WEBHOOK = os.environ.get('TEAMS_WEBHOOK_URL')
 
 # =====================================================================
-# 2. 檢測邏輯 (同步地端 ps1 算法)
+# 2. 核心檢測與指紋
 # =====================================================================
 
 def clean_html_content(html):
-    """移除 Script, Style 與標籤，模擬地端 -replace 邏輯"""
     html = re.sub(r'(?is)<script.*?</script>', '', html)
     html = re.sub(r'(?is)<style.*?</style>', '', html)
     html = re.sub(r'(?s)<[^>]+>', '', html)
     return "".join(html.split())
 
-def get_ssl_days(url):
-    """計算 SSL 剩餘天數"""
-    try:
-        hostname = url.split("//")[-1].split("/")[0].split(":")[0]
-        port = 443
-        if ":446" in url: port = 446
-        context = ssl.create_default_context()
-        with socket.create_connection((hostname, port), timeout=5) as sock:
-            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                cert = ssock.getpeercert()
-                expiry_date = datetime.strptime(cert['notAfter'], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-                remaining = expiry_date - datetime.now(timezone.utc)
-                return f"{remaining.days}天"
-    except: return "N/A"
-
 def check_sites():
-    # 載入歷史指紋
     baseline = {}
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, 'r', encoding='utf-8') as f: baseline = json.load(f)
+        try:
+            with open(STATE_FILE, 'r', encoding='utf-8') as f: baseline = json.load(f)
+        except: pass
 
     results = []
     critical_count = 0
     new_baseline = {}
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     }
 
     for site in SITES:
         status = "🟢 正常"
         latency = 0
         finger = "N/A"
-        ssl_val = get_ssl_days(site['url'])
         
         try:
-            timeout = 45 if ("Mpos" in site['name'] or ":446" in site['url']) else 20
+            timeout = 45 if (":446" in site['url'] or "Mpos" in site['name']) else 20
             start = time.time()
             res = requests.get(site['url'], timeout=timeout, headers=headers, verify=False, allow_redirects=True)
             latency = int((time.time() - start) * 1000)
 
-            # 指紋計算
             content_text = clean_html_content(res.text)
             finger = hashlib.sha256(content_text.encode('utf-8')).hexdigest()[:8]
             new_baseline[site['name']] = finger
             
-            # 比對指紋
             if site['name'] in baseline and baseline[site['name']] != finger:
                 status = "🟠 內容異動"
 
-            # 狀態碼判定 (同步 ps1 邏輯)
             if res.status_code != 200:
                 if res.status_code >= 500:
                     status = f"🔥 服務錯誤({res.status_code})"
@@ -128,7 +108,7 @@ def check_sites():
         except requests.exceptions.Timeout:
             status = "⚪ 境外阻擋(Timeout)"
             latency = "Timeout"
-        except Exception as e:
+        except Exception:
             status = "🔥 斷線(連線失敗)"
             critical_count += 1
             latency = 0
@@ -136,17 +116,15 @@ def check_sites():
         results.append({
             "id": site['id'], "dept": site['dept'], "name": site['name'],
             "status": status, "latency": f"{latency}ms" if isinstance(latency, int) else latency,
-            "ssl": ssl_val, "finger": finger, "url": site['url']
+            "finger": finger, "url": site['url']
         })
 
-    # 存回指紋
     os.makedirs("data", exist_ok=True)
     with open(STATE_FILE, 'w', encoding='utf-8') as f: json.dump(new_baseline, f)
-
     return results, critical_count
 
 # =====================================================================
-# 3. 更新 HTML 與通報
+# 3. 儀表板生成 (修復欄位偏移)
 # =====================================================================
 
 def update_dashboard(results):
@@ -156,6 +134,7 @@ def update_dashboard(results):
         if "斷線" in r['status'] or "錯誤" in r['status']: style = "status-red"
         elif "存活" in r['status'] or "異動" in r['status'] or "阻擋" in r['status']: style = "status-yellow"
         
+        # 🎯 這裡嚴格對齊 7 個 <td> 對應 7 個 <th>
         rows += f"""<tr>
             <td>{r['id']}</td>
             <td>{r['dept']}</td>
@@ -175,7 +154,7 @@ def update_dashboard(results):
     <title>TCB WEB INSPECTOR</title>
     <style>
         body {{ background: #0b0e14; color: #c9d1d9; font-family: sans-serif; padding: 20px; }}
-        .dashboard-table {{ width: 100%; border-collapse: collapse; background: #161b22; margin-top: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }}
+        .dashboard-table {{ width: 100%; border-collapse: collapse; background: #161b22; margin-top: 20px; }}
         .dashboard-table th, td {{ border: 1px solid #30363d; padding: 12px; text-align: left; }}
         .dashboard-table th {{ background: #1f242c; color: #00f2ff; font-size: 14px; }}
         .status-badge {{ padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }}
@@ -185,23 +164,23 @@ def update_dashboard(results):
         a {{ color: #00f2ff; text-decoration: none; }}
         code {{ color: #a5d6ff; font-family: monospace; font-size: 14px; }}
         .accent {{ color: #00f2ff; letter-spacing: 2px; text-shadow: 0 0 5px #00f2ff; }}
-        .info-panel {{ margin-top: 30px; padding: 20px; background: #161b22; border-left: 4px solid #00f2ff; color: #8b949e; font-size: 14px; line-height: 1.8; }}
     </style>
 </head>
 <body>
     <h1 class="accent">TCB WEB MONITORING CENTER</h1>
     <p>LAST UPDATE: {update_time} | 距離下一次重整: <span id="secs" style="color:#00f2ff">60</span>s</p>
     <table class="dashboard-table">
-        <thead><tr><th>序號</th><th>科別</th><th>系統名稱</th><th>當前狀態</th><th>回應延遲</th><th>指紋狀態</th><th>系統連結</th></tr></thead>
+        <thead><tr>
+            <th>序號</th>
+            <th>科別</th>
+            <th>系統名稱</th>
+            <th>當前狀態</th>
+            <th>回應延遲</th>
+            <th>指紋狀態</th>
+            <th>系統連結</th>
+        </tr></thead>
         <tbody>{rows}</tbody>
     </table>
-    <div class="info-panel">
-        <strong style="color:#00f2ff">[ 系統指標與檢測邏輯說明 ]</strong><br>
-        • <strong>當前狀態：</strong>綜合判定 HTTP 狀態碼。收到 403/404 等 WAF 防火牆阻擋視為「系統存活」，500 視為「後端報錯」。<br>
-        • <strong>回應延遲：</strong>記錄從發出 HTTP GET 請求起，至收到伺服器初始回應的絕對時間差 (ms)。<br>
-        • <strong>指紋狀態：</strong>自動剝除程式碼與 HTML 標籤，針對純文字進行 SHA-256 雜湊運算。若變更即觸發異動警示。<br>
-        • <strong>自動更新：</strong>由 GitHub Actions 定時執行巡檢並同步至此網頁。
-    </div>
     <script>
         let timeLeft = 60;
         setInterval(() => {{
@@ -219,17 +198,12 @@ def notify_teams(results, critical_count):
     if not TEAMS_WEBHOOK: return
     is_critical = critical_count > 0
     current_min = datetime.now().minute
-    
-    # 邏輯：有異常立刻報，否則每小時前 15 分鐘報一次
     if is_critical or current_min < 15:
-        title = "🚨 **TCB 系統巡檢告警：部分異常**" if is_critical else "✅ **TCB 系統巡檢日報：全數正常**"
-        table = "| 系統 | 狀態 | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- |\n"
+        title = "🚨 **TCB 系統巡檢告警**" if is_critical else "✅ **TCB 系統巡檢日報**"
+        table = "| 序號 | 系統 | 狀態 | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
         for r in results:
-            table += f"| {r['name']} | {r['status']} | {r['latency']} | {r['finger']} |\n"
-        
-        payload = {
-            "message": f"{title} <br>-----------------------------------<br> **檢測時間**：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} <br> **異常數量**：{critical_count} <br><br> {table} <br> [📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
-        }
+            table += f"| {r['id']} | {r['name']} | {r['status']} | {r['latency']} | {r['finger']} |\n"
+        payload = {"message": f"## {title} <br> 異常數量：{critical_count} <br> {table} <br> [📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"}
         try: requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
         except: pass
 
