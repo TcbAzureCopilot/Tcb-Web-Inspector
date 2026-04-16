@@ -124,7 +124,7 @@ def check_sites():
     return results, critical_count
 
 # =====================================================================
-# 3. 儀表板生成 (修復欄位偏移)
+# 3. 儀表板生成
 # =====================================================================
 
 def update_dashboard(results):
@@ -134,7 +134,7 @@ def update_dashboard(results):
         if "斷線" in r['status'] or "錯誤" in r['status']: style = "status-red"
         elif "存活" in r['status'] or "異動" in r['status'] or "阻擋" in r['status']: style = "status-yellow"
         
-        # 🎯 這裡嚴格對齊 7 個 <td> 對應 7 個 <th>
+        # 嚴格對齊 7 個資料格
         rows += f"""<tr>
             <td>{r['id']}</td>
             <td>{r['dept']}</td>
@@ -164,6 +164,7 @@ def update_dashboard(results):
         a {{ color: #00f2ff; text-decoration: none; }}
         code {{ color: #a5d6ff; font-family: monospace; font-size: 14px; }}
         .accent {{ color: #00f2ff; letter-spacing: 2px; text-shadow: 0 0 5px #00f2ff; }}
+        .info-panel {{ margin-top: 30px; padding: 20px; background: #161b22; border-left: 4px solid #00f2ff; color: #8b949e; font-size: 14px; line-height: 1.8; }}
     </style>
 </head>
 <body>
@@ -181,6 +182,13 @@ def update_dashboard(results):
         </tr></thead>
         <tbody>{rows}</tbody>
     </table>
+    <div class="info-panel">
+        <strong style="color:#00f2ff">[ 系統指標與檢測邏輯說明 ]</strong><br>
+        • <strong>當前狀態：</strong>綜合判定 HTTP 狀態碼。收到 403/404 等 WAF 防火牆阻擋視為「系統存活」，500 視為「後端報錯」。<br>
+        • <strong>回應延遲：</strong>記錄從發出 HTTP GET 請求起，至收到伺服器初始回應的絕對時間差 (ms)。<br>
+        • <strong>指紋狀態：</strong>自動剝除程式碼與 HTML 標籤，針對純文字進行 SHA-256 雜湊運算。若變更即觸發異動警示。<br>
+        • <strong>自動更新：</strong>由地端排程觸發 GitHub Actions 定時執行巡檢並同步至此網頁。
+    </div>
     <script>
         let timeLeft = 60;
         setInterval(() => {{
@@ -195,17 +203,29 @@ def update_dashboard(results):
     with open(DASHBOARD_FILE, 'w', encoding='utf-8') as f: f.write(html)
 
 def notify_teams(results, critical_count):
-    if not TEAMS_WEBHOOK: return
+    if not TEAMS_WEBHOOK: 
+        print("未設定 TEAMS_WEBHOOK_URL，略過通報。")
+        return
+        
     is_critical = critical_count > 0
     current_min = datetime.now().minute
+    
     if is_critical or current_min < 15:
         title = "🚨 **TCB 系統巡檢告警**" if is_critical else "✅ **TCB 系統巡檢日報**"
         table = "| 序號 | 系統 | 狀態 | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
         for r in results:
             table += f"| {r['id']} | {r['name']} | {r['status']} | {r['latency']} | {r['finger']} |\n"
-        payload = {"message": f"## {title} <br> 異常數量：{critical_count} <br> {table} <br> [📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"}
-        try: requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
-        except: pass
+        
+        payload = {
+            "message": f"{title} <br> 異常數量：{critical_count} <br><br> {table} <br> [📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
+        }
+        
+        try: 
+            res = requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
+            if res.status_code == 200:
+                print("✅ Teams 通報發送成功！")
+        except Exception as e: 
+            print(f"❌ Teams 發送失敗: {e}")
 
 if __name__ == "__main__":
     res_data, crit_cnt = check_sites()
