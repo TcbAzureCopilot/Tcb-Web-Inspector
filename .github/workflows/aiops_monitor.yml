@@ -20,6 +20,12 @@ jobs:
 
       - name: 安裝必要套件
         run: pip install requests cryptography urllib3
+        
+      - name: 安裝必要套件
+        run: pip install requests cryptography urllib3 playwright  # 🌟 加入 playwright
+
+      - name: 安裝瀏覽器驅動
+        run: playwright install chromium --with-deps  # 🌟 安裝 Chromium 核心與依賴系統庫
 
       - name: 執行巡檢腳本 (包含 Teams 通報)
         env:
