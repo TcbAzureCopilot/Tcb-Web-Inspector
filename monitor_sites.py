@@ -6,22 +6,58 @@ import json
 import os
 import time
 import re
-import base64  # 🌟 新增
-from datetime import datetime, timezone
+import base64
+from datetime import datetime
 import urllib3
-from playwright.sync_api import sync_playwright # 🌟 新增
+from playwright.sync_api import sync_playwright
 
 # 關閉 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# [SITES 設定區保持不變...]
+# =====================================================================
+# 1. 監控設定區 (完整 32 個站點)
+# =====================================================================
+SITES = [
+    {"id": 1,  "dept": "OA", "name": "銀行官網", "url": "https://www.tcb-bank.com.tw/"},
+    {"id": 2,  "dept": "OA", "name": "合庫金控官網", "url": "https://www.tcfhc.com.tw/"},
+    {"id": 3,  "dept": "EA", "name": "個人網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/"},
+    {"id": 4,  "dept": "EA", "name": "網路銀行", "url": "https://cobank.tcb-bank.com.tw"},
+    {"id": 5,  "dept": "EA", "name": "個人網銀-信用卡/金融卡專區", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.IDV.WEB/ccConsole.jsp"},
+    {"id": 6,  "dept": "EA", "name": "企業網路銀行", "url": "https://cobank.tcb-bank.com.tw/TCB.TWNB.CORP.WEB/"},
+    {"id": 7,  "dept": "EA", "name": "合庫銀行eATM", "url": "https://eatm.tcb-bank.com.tw"},
+    {"id": 8,  "dept": "EA", "name": "金邊分行網銀", "url": "https://ebankkh.tcb-bank.com.tw:446/TCB.PPNB.CORP.WEB/bank.faces"},
+    {"id": 9,  "dept": "EA", "name": "香港網銀入口", "url": "https://ebank.tcb-bank.com.hk/TCB.HKNB.CORP.WEB/bank.jsp"},
+    {"id": 10, "dept": "EA", "name": "大陸網銀", "url": "https://cobank.tcbbk.com.cn"},
+    {"id": 11, "dept": "EA", "name": "合作金庫全球金融網", "url": "https://feoi.tcb-bank.com.tw"},
+    {"id": 12, "dept": "OA", "name": "智能客服", "url": "https://robot.tcb-bank.com.tw/Webhook/"},
+    {"id": 13, "dept": "OA", "name": "媒體檔案傳輸系統", "url": "https://webftp.tcb-bank.com.tw/FileTrans/viewLoginDmz.action"},
+    {"id": 14, "dept": "OA", "name": "學費代收系統", "url": "https://ars.tcb-bank.com.tw/"},
+    {"id": 15, "dept": "OA", "name": "招標採購公告系統", "url": "https://ebulletin.tcb-bank.com.tw/bulletin-web/"},
+    {"id": 16, "dept": "OA", "name": "合作金庫-線上取號", "url": "https://otn.tcb-bank.com.tw/ACweb/"},
+    {"id": 17, "dept": "OA", "name": "數位學習", "url": "https://tcb-elearning.tcb-bank.com.tw/RWD/LoginPage.aspx"},
+    {"id": 18, "dept": "AP4", "name": "金庫幣", "url": "https://mpp.tcb-bank.com.tw/"},
+    {"id": 19, "dept": "AP4", "name": "Mpos行動收單", "url": "https://mpos.tcb-bank.com.tw/erc/Login/Login.aspx"},
+    {"id": 20, "dept": "AP4", "name": "EPGW(電子化繳費平台)", "url": "https://epgw.tcb-bank.com.tw/epgw-madm/"},
+    {"id": 21, "dept": "AP4", "name": "信託服務網", "url": "https://trusts.tcb-bank.com.tw/eTrust/"},
+    {"id": 22, "dept": "AP4", "name": "智能理財", "url": "https://irobo.tcb-bank.com.tw/irobo"},
+    {"id": 23, "dept": "AP4", "name": "財管滿意度調查", "url": "https://wms.tcb-bank.com.tw/"},
+    {"id": 24, "dept": "AP3", "name": "企業線上諮詢", "url": "https://cobank.tcb-bank.com.tw/ELNA/epinput.jsp"},
+    {"id": 25, "dept": "AP3", "name": "微企合E貸線上諮詢", "url": "https://cobank.tcb-bank.com.tw/ELNA/esinput.jsp"},
+    {"id": 26, "dept": "EA", "name": "e帳單代收系統", "url": "https://ebilling.tcb-bank.com.tw"},
+    {"id": 27, "dept": "EA", "name": "供應商查詢系統", "url": "https://mbbank.tcb-bank.com.tw/QSMS/"},
+    {"id": 28, "dept": "EA", "name": "金融友善服務專區", "url": "https://cobank.tcb-bank.com.tw/TCB.BFNB.IDV.WEB"},
+    {"id": 29, "dept": "EA", "name": "票券保管銀行", "url": "https://ebills.tcb-bank.com.tw/ebills/logins"},
+    {"id": 30, "dept": "EA", "name": "新一代信貸系統", "url": "https://cobank.tcb-bank.com.tw/TCB.LOAN.SERVICE/PersonalLoan/Index"},
+    {"id": 31, "dept": "EA", "name": "跨境支付特店後台", "url": "https://copay.tcb-bank.com.tw/fesnetMP2/"},
+    {"id": 32, "dept": "AP3", "name": "客戶滿意度問卷系統", "url": "https://css.tcb-bank.com.tw/"}
+]
 
 STATE_FILE = "data/fingerprints.json"
 DASHBOARD_FILE = "index.html"
 TEAMS_WEBHOOK = os.environ.get('TEAMS_WEBHOOK_URL')
 
 # =====================================================================
-# 2. 核心檢測與截圖
+# 2. 核心檢測與截圖邏輯
 # =====================================================================
 
 def clean_html_content(html):
@@ -31,20 +67,18 @@ def clean_html_content(html):
     return "".join(html.split())
 
 def take_screenshot(browser_context, url):
-    """🌟 執行背景截圖並回傳 Base64 文字"""
+    """執行背景截圖並回傳 Base64 文字"""
     try:
         page = browser_context.new_page()
-        # 設定較小的視窗以節省空間
-        page.set_viewport_size({"width": 1024, "height": 768})
+        page.set_viewport_size({"width": 1280, "height": 720})
+        # 設定 30 秒逾時，等待網頁完全載入
         page.goto(url, timeout=30000, wait_until="load")
-        time.sleep(2) # 額外等待 2 秒確保圖片載入
-        
-        # 截取縮圖以維持 Base64 長度
+        time.sleep(3) # 額外多等 3 秒讓 JavaScript 跑完
         img_bytes = page.screenshot(type='jpeg', quality=60)
         page.close()
         return base64.b64encode(img_bytes).decode('utf-8')
     except Exception as e:
-        print(f"截圖失敗 ({url}): {e}")
+        print(f"  ❌ 截圖失敗: {e}")
         return None
 
 def check_sites():
@@ -57,9 +91,9 @@ def check_sites():
     results = []
     critical_count = 0
     new_baseline = {}
-    headers = {'User-Agent': 'Mozilla/5.0...'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
 
-    # 🌟 啟動瀏覽器引擎
+    # 啟動 Playwright 瀏覽器引擎
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(ignore_https_errors=True)
@@ -68,9 +102,10 @@ def check_sites():
             status = "🟢 正常"
             latency = 0
             finger = "N/A"
-            b64_img = "" # 儲存截圖
+            b64_img = ""
             
             try:
+                # 針對特定慢速網站調整逾時
                 timeout = 45 if (":446" in site['url'] or "Mpos" in site['name']) else 20
                 start = time.time()
                 res = requests.get(site['url'], timeout=timeout, headers=headers, verify=False, allow_redirects=True)
@@ -87,19 +122,19 @@ def check_sites():
                     status = f"🔥 錯誤({res.status_code})"
                     critical_count += 1
 
-            except Exception as e:
+            except Exception:
                 status = "🔥 斷線(連線失敗)"
                 critical_count += 1
                 latency = 0
 
-            # 🌟 如果狀態不正常，進行截圖
+            # 🌟 只有「異常」才截圖，節省 Actions 時間與資源
             if "正常" not in status:
-                print(f"📸 正在為異常站點截圖: {site['name']}")
+                print(f"📸 正在為異常站點拍照: {site['name']}...")
                 b64_img = take_screenshot(context, site['url'])
 
             results.append({
                 "id": site['id'], "dept": site['dept'], "name": site['name'],
-                "status": status, "latency": f"{latency}ms",
+                "status": status, "latency": f"{latency}ms" if latency > 0 else "0ms",
                 "finger": finger, "url": site['url'], "img": b64_img
             })
 
@@ -110,7 +145,7 @@ def check_sites():
     return results, critical_count
 
 # =====================================================================
-# 3. 儀表板生成 (加入圖片顯示與點擊放大)
+# 3. 儀表板與通知
 # =====================================================================
 
 def update_dashboard(results):
@@ -120,9 +155,9 @@ def update_dashboard(results):
         if "斷線" in r['status'] or "錯誤" in r['status']: style = "status-red"
         elif "異動" in r['status']: style = "status-yellow"
         
-        # 🌟 處理圖片顯示
         img_html = "N/A"
         if r['img']:
+            # 點擊圖片會呼叫下方的 openModal 放大
             img_html = f'<img src="data:image/jpeg;base64,{r["img"]}" class="thumb" onclick="openModal(this.src)">'
 
         rows += f"""<tr>
@@ -145,15 +180,14 @@ def update_dashboard(results):
         body {{ background: #0b0e14; color: #c9d1d9; font-family: sans-serif; padding: 20px; }}
         .dashboard-table {{ width: 100%; border-collapse: collapse; background: #161b22; }}
         .dashboard-table th, td {{ border: 1px solid #30363d; padding: 12px; text-align: left; }}
-        .status-badge {{ padding: 4px 8px; border-radius: 4px; font-weight: bold; }}
+        .status-badge {{ padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }}
         .status-green {{ color: #2ecc71; border: 1px solid #2ecc71; }}
         .status-yellow {{ color: #f1c40f; border: 1px solid #f1c40f; }}
         .status-red {{ color: #e74c3c; border: 1px solid #e74c3c; }}
-        .thumb {{ width: 80px; height: 50px; object-fit: cover; cursor: pointer; border: 1px solid #30363d; }}
+        .thumb {{ width: 100px; cursor: pointer; border: 1px solid #444; }}
         .thumb:hover {{ border-color: #00f2ff; }}
-        /* Modal 樣式 */
-        #modal {{ display:none; position:fixed; z-index:99; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.9); }}
-        #modalImg {{ margin: auto; display: block; max-width: 90%; max-height: 90%; padding-top: 40px; }}
+        #modal {{ display:none; position:fixed; z-index:99; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.9); text-align:center; }}
+        #modalImg {{ max-width: 90%; max-height: 90%; margin-top: 2%; border: 2px solid #fff; }}
     </style>
 </head>
 <body>
@@ -161,11 +195,10 @@ def update_dashboard(results):
     <p>LAST UPDATE: {update_time}</p>
     <table class="dashboard-table">
         <thead><tr>
-            <th>序號</th><th>科別</th><th>系統名稱</th><th>當前狀態</th><th>回應延遲</th><th>即時畫面</th><th>連結</th>
+            <th>序號</th><th>科別</th><th>系統</th><th>狀態</th><th>延遲</th><th>即時截圖(點圖放大)</th><th>連結</th>
         </tr></thead>
         <tbody>{rows}</tbody>
     </table>
-
     <div id="modal" onclick="this.style.display='none'"><img id="modalImg"></div>
     <script>
         function openModal(src) {{
@@ -177,28 +210,18 @@ def update_dashboard(results):
 </html>"""
     with open(DASHBOARD_FILE, 'w', encoding='utf-8') as f: f.write(html)
 
-# [notify_teams 保持不變，因為 Teams Webhook 帶不動大圖，建議維持表格文字]
-
 def notify_teams(results, critical_count):
     if not TEAMS_WEBHOOK: return
     is_crit = critical_count > 0
-    
     if is_crit or datetime.now().minute < 15:
         title = "🚨 **TCB 系統巡檢告警**" if is_crit else "✅ **TCB 系統巡檢日報**"
-        
-        # 嚴格使用 \n 換行建立 Markdown 表格
-        table = "| 序號 | 系統 | 狀態 | 延遲 | 指紋 |\n| :--- | :--- | :--- | :--- | :--- |\n"
+        table = "| 序號 | 系統 | 狀態 | 延遲 |\n| :--- | :--- | :--- | :--- |\n"
         for r in results: 
-            table += f"| {r['id']} | {r['name']} | {r['status']} | {r['latency']} | {r['finger']} |\n"
+            table += f"| {r['id']} | {r['name']} | {r['status']} | {r['latency']} |\n"
         
-        # 絕對不能混用 <br>，全部改用 \n\n 來做段落分隔
-        msg = f"{title}\n\n**異常數量**：{critical_count}\n\n{table}\n\n[📊 查看即時儀表板](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
-        
-        payload = {"message": msg}
-        try: 
-            requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
-        except Exception as e: 
-            print(f"Teams 發送失敗: {e}")
+        msg = f"{title}\n\n**異常數量**：{critical_count}\n\n{table}\n\n[📊 查看即時儀表板(含截圖)](https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/)"
+        try: requests.post(TEAMS_WEBHOOK, json={"message": msg}, timeout=10)
+        except: pass
 
 if __name__ == "__main__":
     res_data, crit_cnt = check_sites()
