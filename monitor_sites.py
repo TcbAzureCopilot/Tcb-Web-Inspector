@@ -1,6 +1,5 @@
 import requests
 import ssl
-import socket
 import hashlib
 import json
 import os
@@ -15,7 +14,7 @@ from playwright.sync_api import sync_playwright
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # =====================================================================
-# 1. 監控設定區 (完整 32 個站點)
+# 1. 監控設定區 (保持 32 個站點)
 # =====================================================================
 SITES = [
     {"id": 1,  "dept": "OA", "name": "銀行官網", "url": "https://www.tcb-bank.com.tw/"},
@@ -57,7 +56,7 @@ DASHBOARD_FILE = "index.html"
 TEAMS_WEBHOOK = os.environ.get('TEAMS_WEBHOOK_URL')
 
 # =====================================================================
-# 2. 核心檢測與截圖邏輯
+# 2. 核心檢測邏輯
 # =====================================================================
 
 def clean_html_content(html):
@@ -66,20 +65,23 @@ def clean_html_content(html):
     html = re.sub(r'(?s)<[^>]+>', '', html)
     return "".join(html.split())
 
-def take_screenshot(browser_context, url):
-    """執行背景截圖並回傳 Base64 文字"""
-    try:
-        page = browser_context.new_page()
-        page.set_viewport_size({"width": 1280, "height": 720})
-        # 設定 30 秒逾時，等待網頁完全載入
-        page.goto(url, timeout=30000, wait_until="load")
-        time.sleep(3) # 額外多等 3 秒讓 JavaScript 跑完
-        img_bytes = page.screenshot(type='jpeg', quality=60)
-        page.close()
-        return base64.b64encode(img_bytes).decode('utf-8')
-    except Exception as e:
-        print(f"  ❌ 截圖失敗: {e}")
-        return None
+def take_screenshot(browser_context, url, retries=2):
+    """🌟 升級版截圖：增加重試與寬鬆載入條件"""
+    for attempt in range(retries):
+        try:
+            page = browser_context.new_page()
+            page.set_viewport_size({"width": 1280, "height": 720})
+            # 💡 改用 domcontentloaded (結構跑完就截圖) 並延長超時到 60s
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            time.sleep(5) # 多等一下讓畫面穩定
+            img_bytes = page.screenshot(type='jpeg', quality=60)
+            page.close()
+            return base64.b64encode(img_bytes).decode('utf-8')
+        except Exception as e:
+            print(f"  ⚠️ 截圖嘗試 {attempt+1} 失敗: {e}")
+            if page: page.close()
+            if attempt == retries - 1: return None
+            time.sleep(5) # 重試前稍等
 
 def check_sites():
     baseline = {}
@@ -93,7 +95,6 @@ def check_sites():
     new_baseline = {}
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
 
-    # 啟動 Playwright 瀏覽器引擎
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(ignore_https_errors=True)
@@ -104,30 +105,31 @@ def check_sites():
             finger = "N/A"
             b64_img = ""
             
-            try:
-                # 針對特定慢速網站調整逾時
-                timeout = 45 if (":446" in site['url'] or "Mpos" in site['name']) else 20
-                start = time.time()
-                res = requests.get(site['url'], timeout=timeout, headers=headers, verify=False, allow_redirects=True)
-                latency = int((time.time() - start) * 1000)
+            # 🌟 請求重試邏輯 (針對斷線問題)
+            for retry_req in range(2):
+                try:
+                    timeout = 60 if (":446" in site['url'] or "Mpos" in site['name'] or "大陸" in site['name']) else 30
+                    start = time.time()
+                    res = requests.get(site['url'], timeout=timeout, headers=headers, verify=False, allow_redirects=True)
+                    latency = int((time.time() - start) * 1000)
 
-                content_text = clean_html_content(res.text)
-                finger = hashlib.sha256(content_text.encode('utf-8')).hexdigest()[:8]
-                new_baseline[site['name']] = finger
-                
-                if site['name'] in baseline and baseline[site['name']] != finger:
-                    status = "🟠 內容異動"
+                    if res.status_code == 200:
+                        content_text = clean_html_content(res.text)
+                        finger = hashlib.sha256(content_text.encode('utf-8')).hexdigest()[:8]
+                        new_baseline[site['name']] = finger
+                        if site['name'] in baseline and baseline[site['name']] != finger:
+                            status = "🟠 內容異動"
+                        break # 成功就跳出重試
+                    else:
+                        status = f"🔥 錯誤({res.status_code})"
+                        critical_count += 1
+                        break
+                except Exception:
+                    status = "🔥 斷線(連線失敗)"
+                    if retry_req == 1: critical_count += 1 # 第二次失敗才計入異常
+                    time.sleep(3)
 
-                if res.status_code != 200:
-                    status = f"🔥 錯誤({res.status_code})"
-                    critical_count += 1
-
-            except Exception:
-                status = "🔥 斷線(連線失敗)"
-                critical_count += 1
-                latency = 0
-
-            # 🌟 只有「異常」才截圖，節省 Actions 時間與資源
+            # 🌟 異常則截圖 (會進入內部的重試邏輯)
             if "正常" not in status:
                 print(f"📸 正在為異常站點拍照: {site['name']}...")
                 b64_img = take_screenshot(context, site['url'])
