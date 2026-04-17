@@ -157,10 +157,26 @@ def update_dashboard(results):
         if "斷線" in r['status'] or "錯誤" in r['status']: style = "status-red"
         elif "異動" in r['status']: style = "status-yellow"
         
+        # 🌟 修改這裡：不再判斷 r['img']，而是根據狀態「預判」圖片路徑
         img_html = "N/A"
-        if r['img']:
-            # 點擊圖片會呼叫下方的 openModal 放大
-            img_html = f'<img src="data:image/jpeg;base64,{r["img"]}" class="thumb" onclick="openModal(this.src)">'
+        
+        # 只要狀態不是正常，我們就假設地端已經把圖傳上去了
+        # 建議地端上傳時，檔名統一使用 site_{id}.png (例如 site_10.png)
+        if "正常" not in r['status']:
+            # 這裡的路徑對應到你 GitHub Pages 的網址
+            image_url = f"https://TcbAzureCopilot.github.io/Tcb-Web-Inspector/data/screenshots/site_{r['id']}.png"
+            
+            # 加上一個隨機參數 ?t=... 是為了防止瀏覽器快取 (Cache)，讓你每次看都是最新的圖
+            cache_buster = int(time.time()) 
+            
+            img_html = f"""
+            <img src="{image_url}?t={cache_buster}" 
+                 width="100" 
+                 onclick="openModal(this.src)" 
+                 style="cursor:pointer; border:1px solid #444;"
+                 onerror="this.style.display='none'"> 
+            """
+            # onerror 的作用是：如果地端還沒上傳這張圖，就先隱藏不顯示，避免出現叉叉破圖
 
         rows += f"""<tr>
             <td>{r['id']}</td>
